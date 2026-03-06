@@ -1,0 +1,48 @@
+import { setupManifest } from '@start9labs/start-sdk'
+import { long, short } from './i18n'
+
+export const manifest = setupManifest({
+  id: 'jitsi',
+  title: 'Jitsi Meet',
+  license: 'Apache-2.0',
+  packageRepo: 'https://github.com/Start9Labs/jitsi-startos/tree/update/040',
+  upstreamRepo: 'https://github.com/jitsi/docker-jitsi-meet',
+  marketingUrl: 'https://jitsi.org/',
+  donationUrl: null,
+  docsUrls: [
+    'https://jitsi.github.io/handbook/docs/devops-guide/devops-guide-docker',
+  ],
+  description: { short, long },
+  volumes: ['main'],
+  images: {
+    web: {
+      source: { dockerTag: 'jitsi/web:stable-10741' },
+      arch: ['x86_64', 'aarch64'],
+    },
+    prosody: {
+      source: { dockerTag: 'jitsi/prosody:stable-10741' },
+      arch: ['x86_64', 'aarch64'],
+    },
+    jicofo: {
+      source: { dockerTag: 'jitsi/jicofo:stable-10741' },
+      arch: ['x86_64', 'aarch64'],
+    },
+    jvb: {
+      source: { dockerTag: 'jitsi/jvb:stable-10741' },
+      arch: ['x86_64', 'aarch64'],
+    },
+    coturn: {
+      source: { dockerTag: 'coturn/coturn:4.6.3' },
+      arch: ['x86_64', 'aarch64'],
+    },
+  },
+  alerts: {
+    install: null,
+    update: null,
+    uninstall: null,
+    restore: null,
+    start: null,
+    stop: null,
+  },
+  dependencies: {},
+})
