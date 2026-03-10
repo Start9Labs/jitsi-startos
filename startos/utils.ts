@@ -1,24 +1,17 @@
-import { T, utils } from '@start9labs/start-sdk'
+import { utils } from '@start9labs/start-sdk'
 import { sdk } from './sdk'
 
 export const uiPort = 80
+export const turnPort = 3478
+
 export const uiInterfaceId = 'ui'
+export const turnInterfaceId = 'turn'
 
 export function getPassword() {
   return utils.getDefaultString({
     charset: 'a-z,A-Z,0-9',
     len: 32,
   })
-}
-
-export async function getInterfaceUrls(effects: T.Effects) {
-  return sdk.serviceInterface
-    .getOwn(
-      effects,
-      uiInterfaceId,
-      (i) => i?.addressInfo?.nonLocal.format() || [],
-    )
-    .const()
 }
 
 export const xmppConfig = {

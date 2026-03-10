@@ -1,25 +1,43 @@
+import { storeJson } from './fileModels/store.json'
 import { i18n } from './i18n'
 import { sdk } from './sdk'
-import { storeJson } from './fileModels/store.json'
 import {
-  uiPort,
-  xmppConfig,
-  prosodyMounts,
-  webMounts,
+  coturnMounts,
   jicofoMounts,
   jvbMounts,
-  coturnMounts,
+  prosodyMounts,
+  turnInterfaceId,
+  turnPort,
+  uiPort,
+  webMounts,
+  xmppConfig,
 } from './utils'
 
 export const main = sdk.setupMain(async ({ effects }) => {
   console.info(i18n('Starting Jitsi Meet!'))
 
-  const store = await storeJson.read().once()
-  if (!store) throw new Error('store.json not found')
+  const store = await storeJson.read().const(effects)
+  if (!store) {
+    throw new Error('store.json not found')
+  }
+  const { JICOFO_AUTH_PASSWORD, JVB_AUTH_PASSWORD, TURN_SECRET, turnEnabled } =
+    store
 
-  const hostname = store.primaryUrl
-    ? new URL(store.primaryUrl).hostname
-    : ''
+  // If TURN is enabled, resolve the public domain from the turn interface
+  let turnHost: string | undefined
+  if (turnEnabled) {
+    turnHost = await sdk.serviceInterface
+      .getOwn(
+        effects,
+        turnInterfaceId,
+        (i) =>
+          i?.addressInfo
+            ?.filter({ visibility: 'public', kind: 'domain' })
+            .format('hostname-info')
+            .at(0)?.hostname,
+      )
+      .const()
+  }
 
   const commonEnv = {
     TZ: 'UTC',
@@ -38,15 +56,20 @@ export const main = sdk.setupMain(async ({ effects }) => {
         command: sdk.useEntrypoint(),
         env: {
           ...commonEnv,
+          // Require authentication to create rooms; guests can join
+          ENABLE_AUTH: '1',
+          ENABLE_GUESTS: '1',
+          AUTH_TYPE: 'internal',
           JICOFO_AUTH_USER: 'focus',
-          JICOFO_AUTH_PASSWORD: store.jicofoAuthPassword,
+          JICOFO_AUTH_PASSWORD,
           JVB_AUTH_USER: 'jvb',
-          JVB_AUTH_PASSWORD: store.jvbAuthPassword,
-          TURN_SECRET: store.turnSecret,
+          JVB_AUTH_PASSWORD,
+          TURN_SECRET,
         },
       },
       ready: {
         display: i18n('XMPP Server'),
+        gracePeriod: 30_000,
         fn: () =>
           sdk.healthCheck.checkPortListening(effects, 5280, {
             successMessage: i18n('The XMPP server is ready'),
@@ -62,25 +85,42 @@ export const main = sdk.setupMain(async ({ effects }) => {
         coturnMounts,
         'coturn-sub',
       ),
-      exec: {
-        command: [
-          'turnserver',
-          '-n',
-          '--log-file=stdout',
-          '--lt-cred-mech',
-          `--realm=${xmppConfig.XMPP_DOMAIN}`,
-          `--static-auth-secret=${store.turnSecret}`,
-          '--listening-port=3478',
-          ...(hostname ? [`--external-ip=${hostname}`] : []),
-        ],
-      },
+      // Three states: running (enabled + domain), idle (enabled, no domain), idle (disabled).
+      // Coturn listens on plain TCP; StartOS terminates TLS in front of it.
+      exec:
+        turnEnabled && turnHost
+          ? {
+              command: [
+                'turnserver',
+                '-n',
+                '--log-file=stdout',
+                '--lt-cred-mech', // time-limited credentials via shared secret
+                `--realm=${xmppConfig.XMPP_DOMAIN}`,
+                `--static-auth-secret=${TURN_SECRET}`,
+                `--listening-port=${turnPort}`,
+              ],
+            }
+          : { command: ['sleep', 'infinity'] },
       ready: {
         display: i18n('TURN Server'),
-        fn: () =>
-          sdk.healthCheck.checkPortListening(effects, 3478, {
-            successMessage: i18n('The TURN server is ready'),
-            errorMessage: i18n('The TURN server is not ready'),
-          }),
+        fn:
+          turnEnabled && turnHost
+            ? () =>
+                sdk.healthCheck.checkPortListening(effects, 3478, {
+                  successMessage: i18n('The TURN server is ready'),
+                  errorMessage: i18n('The TURN server is not ready'),
+                })
+            : turnEnabled
+              ? async () => ({
+                  result: 'failure',
+                  message: i18n(
+                    'Waiting for a public domain on the TURN interface. Please configure a domain in StartOS.',
+                  ),
+                })
+              : async () => ({
+                  result: 'disabled',
+                  message: null,
+                }),
       },
       requires: [],
     })
@@ -95,14 +135,26 @@ export const main = sdk.setupMain(async ({ effects }) => {
         command: sdk.useEntrypoint(),
         env: {
           ...commonEnv,
+          ENABLE_AUTH: '1',
+          ENABLE_GUESTS: '1',
+          // StartOS handles TLS; the web container serves plain HTTP
           DISABLE_HTTPS: '1',
+          // Generate a relative BOSH URL (/http-bind) so it works from any
+          // origin (.local, clearnet, Tor) without knowing the public hostname
+          BOSH_RELATIVE: '1',
+          // No relative option exists for websocket — it always generates an
+          // absolute wss://localhost:8443 URL. Disable it so the client uses BOSH.
+          ENABLE_XMPP_WEBSOCKET: '0',
+          // Internal nginx proxy target for BOSH requests → prosody
           XMPP_BOSH_URL_BASE: 'http://localhost:5280',
-          ...(hostname
+          // TURN config is injected into the client-side config.js so browsers
+          // know to request relay candidates from this server
+          ...(turnHost
             ? {
                 TURN_ENABLE: '1',
-                TURN_HOST: hostname,
-                TURN_PORT: '3478',
-                TURN_TRANSPORT: 'udp',
+                TURN_HOST: turnHost,
+                TURN_PORT: '443',
+                TURN_TRANSPORT: 'tcp',
               }
             : {}),
         },
@@ -129,16 +181,20 @@ export const main = sdk.setupMain(async ({ effects }) => {
         env: {
           ...commonEnv,
           JICOFO_AUTH_USER: 'focus',
-          JICOFO_AUTH_PASSWORD: store.jicofoAuthPassword,
+          JICOFO_AUTH_PASSWORD,
         },
       },
       ready: {
         display: i18n('Conference Focus'),
         fn: () =>
-          sdk.healthCheck.checkPortListening(effects, 8888, {
-            successMessage: i18n('The conference focus is ready'),
-            errorMessage: i18n('The conference focus is not ready'),
-          }),
+          sdk.healthCheck.checkWebUrl(
+            effects,
+            'http://127.0.0.1:8888/about/health',
+            {
+              successMessage: i18n('The conference focus is ready'),
+              errorMessage: i18n('The conference focus is not ready'),
+            },
+          ),
       },
       requires: ['prosody'],
     })
@@ -154,11 +210,10 @@ export const main = sdk.setupMain(async ({ effects }) => {
         env: {
           ...commonEnv,
           JVB_AUTH_USER: 'jvb',
-          JVB_AUTH_PASSWORD: store.jvbAuthPassword,
+          JVB_AUTH_PASSWORD,
           JVB_PORT: '10000',
           JVB_BREWERY_MUC: 'jvbbrewery',
           COLIBRI_REST_ENABLED: 'true',
-          ...(hostname ? { JVB_ADVERTISE_IPS: hostname } : {}),
         },
       },
       ready: {

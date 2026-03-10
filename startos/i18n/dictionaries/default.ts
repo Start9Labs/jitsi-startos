@@ -28,12 +28,26 @@ const dict = {
   'TURN relay server for NAT traversal': 21,
 
   // actions
-  'Set Primary URL': 22,
-  'Choose which URL to use as the primary address for Jitsi Meet. This determines the hostname advertised for video and TURN connections.': 23,
-  'URL': 24,
+  'Configure TURN': 22,
+  'Enable or disable the TURN relay server for participants behind restrictive NATs or firewalls. Requires a public address configured in StartOS.': 23,
+  'Enable TURN': 24,
 
-  // init tasks
-  'Jitsi requires a primary URL for video conferencing to work. Select the address participants will use to connect.': 25,
+  // main.ts (TURN)
+  'Waiting for a public domain on the TURN interface. Please configure a domain in StartOS.': 25,
+
+  // init
+  'Enable a TURN relay server to help participants behind restrictive firewalls or NATs join video calls.': 26,
+  'Create an admin password so only you can start meetings.': 27,
+
+  // actions (auth)
+  'Reset Admin Password': 28,
+  'Create Admin Password': 29,
+  'Reset the administrator password for creating meetings': 30,
+  'Create the administrator password for creating meetings': 31,
+  'Success': 32,
+  'Your admin password has been set. Use these credentials to create meetings.': 33,
+  'Username': 34,
+  'Password': 35,
 } as const
 
 /**

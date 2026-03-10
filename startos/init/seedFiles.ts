@@ -6,8 +6,8 @@ export const seedFiles = sdk.setupOnInit(async (effects, kind) => {
   if (kind !== 'install') return
 
   await storeJson.merge(effects, {
-    jicofoAuthPassword: getPassword(),
-    jvbAuthPassword: getPassword(),
-    turnSecret: getPassword(),
+    JICOFO_AUTH_PASSWORD: getPassword(),
+    JVB_AUTH_PASSWORD: getPassword(),
+    TURN_SECRET: getPassword(),
   })
 })

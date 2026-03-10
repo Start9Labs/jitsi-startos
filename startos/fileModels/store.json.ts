@@ -2,10 +2,11 @@ import { FileHelper, z } from '@start9labs/start-sdk'
 import { sdk } from '../sdk'
 
 const shape = z.object({
-  jicofoAuthPassword: z.string(),
-  jvbAuthPassword: z.string(),
-  turnSecret: z.string(),
-  primaryUrl: z.string().catch(''),
+  JICOFO_AUTH_PASSWORD: z.string(),
+  JVB_AUTH_PASSWORD: z.string(),
+  TURN_SECRET: z.string(),
+  turnEnabled: z.boolean().catch(false),
+  ADMIN_PASSWORD: z.string().catch(''),
 })
 
 export const storeJson = FileHelper.json(

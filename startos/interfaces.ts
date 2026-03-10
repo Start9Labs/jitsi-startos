@@ -1,9 +1,12 @@
+import { storeJson } from './fileModels/store.json'
 import { i18n } from './i18n'
 import { sdk } from './sdk'
-import { uiPort, uiInterfaceId } from './utils'
+import { turnInterfaceId, turnPort, uiInterfaceId, uiPort } from './utils'
 
 export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
-  // Web UI (HTTP)
+  const turnEnabled = await storeJson.read((s) => s.turnEnabled).const(effects)
+
+  // Web UI
   const uiMulti = sdk.MultiHost.of(effects, 'ui-multi')
   const uiOrigin = await uiMulti.bindPort(uiPort, {
     protocol: 'http',
@@ -22,8 +25,8 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
     }),
   ])
 
-  // JVB media (UDP 10000)
-  const jvbMulti = sdk.MultiHost.of(effects, 'jvb-media')
+  // JVB media
+  const jvbMulti = sdk.MultiHost.of(effects, 'jvb-media-multi')
   const jvbOrigin = await jvbMulti.bindPort(10000, {
     protocol: null,
     preferredExternalPort: 10000,
@@ -36,7 +39,7 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
       id: 'jvb-media',
       description: i18n('WebRTC media transport for video and audio'),
       type: 'api',
-      masked: true,
+      masked: false,
       schemeOverride: null,
       username: null,
       path: '',
@@ -44,27 +47,36 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
     }),
   ])
 
-  // TURN relay (UDP 3478)
-  const turnMulti = sdk.MultiHost.of(effects, 'turn')
-  const turnOrigin = await turnMulti.bindPort(3478, {
-    protocol: null,
-    preferredExternalPort: 3478,
-    secure: { ssl: false },
-    addSsl: null,
-  })
-  const turnReceipt = await turnOrigin.export([
-    sdk.createInterface(effects, {
-      name: i18n('TURN Relay'),
-      id: 'turn',
-      description: i18n('TURN relay server for NAT traversal'),
-      type: 'api',
-      masked: true,
-      schemeOverride: null,
-      username: null,
-      path: '',
-      query: {},
-    }),
-  ])
+  const receipts = [uiReceipt, jvbReceipt]
 
-  return [uiReceipt, jvbReceipt, turnReceipt]
+  // TURN relay
+  if (turnEnabled) {
+    const turnMulti = sdk.MultiHost.of(effects, 'turn-multi')
+    const turnOrigin = await turnMulti.bindPort(turnPort, {
+      protocol: null,
+      preferredExternalPort: turnPort,
+      addSsl: {
+        preferredExternalPort: turnPort,
+        alpn: null,
+        addXForwardedHeaders: false,
+      },
+      secure: null,
+    })
+    const turnReceipt = await turnOrigin.export([
+      sdk.createInterface(effects, {
+        name: i18n('TURN Relay'),
+        id: turnInterfaceId,
+        description: i18n('TURN relay server for NAT traversal'),
+        type: 'api',
+        masked: false,
+        schemeOverride: null,
+        username: null,
+        path: '',
+        query: {},
+      }),
+    ])
+    receipts.push(turnReceipt)
+  }
+
+  return receipts
 })
