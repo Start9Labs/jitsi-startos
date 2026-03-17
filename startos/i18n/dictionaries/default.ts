@@ -19,6 +19,10 @@ const dict = {
   'The TURN server is ready': 14,
   'The TURN server is not ready': 15,
 
+  'Required to support mobile carriers, hotel WiFi, and UDP-blocking firewalls. To enable, add a public domain to the "TURN Relay" interface.': 37,
+  'Required for clearnet. Enable a public IPv4 address in the "Video Bridge Media" interface.': 38,
+  'Only needed if using a public domain.': 39,
+
   // interfaces.ts
   'Web UI': 16,
   'The web interface of Jitsi Meet': 17,
@@ -27,16 +31,7 @@ const dict = {
   'TURN Relay': 20,
   'TURN relay server for NAT traversal': 21,
 
-  // actions
-  'Configure TURN': 22,
-  'Enable or disable the TURN relay server for participants behind restrictive NATs or firewalls. Requires a public address configured in StartOS.': 23,
-  'Enable TURN': 24,
-
-  // main.ts (TURN)
-  'Waiting for a public domain on the TURN interface. Please configure a domain in StartOS.': 25,
-
   // init
-  'Enable a TURN relay server to help participants behind restrictive firewalls or NATs join video calls.': 26,
   'Create an admin password so only you can start meetings.': 27,
 
   // actions (auth)

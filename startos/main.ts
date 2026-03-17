@@ -3,11 +3,18 @@ import { i18n } from './i18n'
 import { sdk } from './sdk'
 import {
   coturnMounts,
+  jicofoHealthPort,
   jicofoMounts,
+  jvbHttpPort,
+  jvbMediaInterfaceId,
+  jvbMediaPort,
   jvbMounts,
+  prosodyEnv,
   prosodyMounts,
+  prosodyPort,
   turnInterfaceId,
   turnPort,
+  uiInterfaceId,
   uiPort,
   webMounts,
   xmppConfig,
@@ -20,31 +27,68 @@ export const main = sdk.setupMain(async ({ effects }) => {
   if (!store) {
     throw new Error('store.json not found')
   }
-  const { JICOFO_AUTH_PASSWORD, JVB_AUTH_PASSWORD, TURN_SECRET, turnEnabled } =
-    store
+  const { JICOFO_AUTH_PASSWORD, JVB_AUTH_PASSWORD, TURN_SECRET } = store
 
-  // If TURN is enabled, resolve the public domain from the turn interface
-  let turnHost: string | undefined
-  if (turnEnabled) {
-    turnHost = await sdk.serviceInterface
-      .getOwn(
-        effects,
-        turnInterfaceId,
-        (i) =>
-          i?.addressInfo
-            ?.filter({ visibility: 'public', kind: 'domain' })
-            .format('hostname-info')
-            .at(0)?.hostname,
-      )
-      .const()
-  }
+  // Resolve public IPs from the JVB media interface so JVB advertises
+  // the correct addresses instead of the STUN-discovered one
+  const jvbPublicIps = await sdk.serviceInterface
+    .getOwn(effects, jvbMediaInterfaceId, (i) =>
+      i?.addressInfo
+        ?.filter({ visibility: 'public', kind: 'ipv4' })
+        .format('hostname-info')
+        .map((h) => h.hostname),
+    )
+    .const()
+
+  // If the UI is publicly accessible but JVB has no public IPv4, calls will fail
+  const uiIsPublic = await sdk.serviceInterface
+    .getOwn(effects, uiInterfaceId, (i) =>
+      !!i?.addressInfo
+        ?.filter({ visibility: 'public' })
+        .format('hostname-info').length,
+    )
+    .const()
+  const jvbMissingPublicIp = uiIsPublic && !jvbPublicIps?.length
+
+  // Resolve the public domain from the TURN interface (if one is configured)
+  const turnHost = await sdk.serviceInterface
+    .getOwn(
+      effects,
+      turnInterfaceId,
+      (i) =>
+        i?.addressInfo
+          ?.filter({ visibility: 'public', kind: 'domain' })
+          .format('hostname-info')
+          .at(0)?.hostname,
+    )
+    .const()
 
   const commonEnv = {
     TZ: 'UTC',
     ...xmppConfig,
   }
 
+  const webSub = await sdk.SubContainer.of(
+    effects,
+    { imageId: 'web' },
+    webMounts,
+    'web-sub',
+  )
+
   return sdk.Daemons.of(effects)
+    .addOneshot('nginx-patch', {
+      subcontainer: webSub,
+      // Write custom nginx config before web daemon starts.
+      // Increases BOSH proxy timeout to prevent client disconnections.
+      exec: {
+        command: [
+          'sh',
+          '-c',
+          'mkdir -p /config/nginx && echo "proxy_read_timeout 3600;" > /config/nginx/custom-meet.conf',
+        ],
+      },
+      requires: [],
+    })
     .addDaemon('prosody', {
       subcontainer: await sdk.SubContainer.of(
         effects,
@@ -54,24 +98,18 @@ export const main = sdk.setupMain(async ({ effects }) => {
       ),
       exec: {
         command: sdk.useEntrypoint(),
-        env: {
-          ...commonEnv,
-          // Require authentication to create rooms; guests can join
-          ENABLE_AUTH: '1',
-          ENABLE_GUESTS: '1',
-          AUTH_TYPE: 'internal',
-          JICOFO_AUTH_USER: 'focus',
+        runAsInit: true,
+        env: prosodyEnv({
           JICOFO_AUTH_PASSWORD,
-          JVB_AUTH_USER: 'jvb',
           JVB_AUTH_PASSWORD,
           TURN_SECRET,
-        },
+        }),
       },
       ready: {
         display: i18n('XMPP Server'),
         gracePeriod: 30_000,
         fn: () =>
-          sdk.healthCheck.checkPortListening(effects, 5280, {
+          sdk.healthCheck.checkPortListening(effects, prosodyPort, {
             successMessage: i18n('The XMPP server is ready'),
             errorMessage: i18n('The XMPP server is not ready'),
           }),
@@ -85,54 +123,49 @@ export const main = sdk.setupMain(async ({ effects }) => {
         coturnMounts,
         'coturn-sub',
       ),
-      // Three states: running (enabled + domain), idle (enabled, no domain), idle (disabled).
       // Coturn listens on plain TCP; StartOS terminates TLS in front of it.
-      exec:
-        turnEnabled && turnHost
-          ? {
-              command: [
-                'turnserver',
-                '-n',
-                '--log-file=stdout',
-                '--lt-cred-mech', // time-limited credentials via shared secret
-                `--realm=${xmppConfig.XMPP_DOMAIN}`,
-                `--static-auth-secret=${TURN_SECRET}`,
-                `--listening-port=${turnPort}`,
-              ],
-            }
-          : { command: ['sleep', 'infinity'] },
+      // If no public domain is configured yet, coturn idles.
+      exec: turnHost
+        ? {
+            command: [
+              'turnserver',
+              '-n',
+              '--log-file=stdout',
+              '--lt-cred-mech', // time-limited credentials via shared secret
+              `--realm=${xmppConfig.XMPP_DOMAIN}`,
+              `--static-auth-secret=${TURN_SECRET}`,
+              `--listening-port=${turnPort}`,
+            ],
+          }
+        : { command: ['sleep', 'infinity'] },
       ready: {
         display: i18n('TURN Server'),
-        fn:
-          turnEnabled && turnHost
-            ? () =>
-                sdk.healthCheck.checkPortListening(effects, 3478, {
-                  successMessage: i18n('The TURN server is ready'),
-                  errorMessage: i18n('The TURN server is not ready'),
-                })
-            : turnEnabled
-              ? async () => ({
-                  result: 'failure',
-                  message: i18n(
-                    'Waiting for a public domain on the TURN interface. Please configure a domain in StartOS.',
-                  ),
-                })
-              : async () => ({
-                  result: 'disabled',
-                  message: null,
-                }),
+        fn: turnHost
+          ? () =>
+              sdk.healthCheck.checkPortListening(effects, 3478, {
+                successMessage: i18n('The TURN server is ready'),
+                errorMessage: i18n('The TURN server is not ready'),
+              })
+          : async () =>
+              uiIsPublic
+                ? {
+                    result: 'failure' as const,
+                    message: i18n(
+                      'Required to support mobile carriers, hotel WiFi, and UDP-blocking firewalls. To enable, add a public domain to the "TURN Relay" interface.',
+                    ),
+                  }
+                : {
+                    result: 'disabled' as const,
+                    message: i18n('Only needed if using a public domain.'),
+                  },
       },
       requires: [],
     })
     .addDaemon('web', {
-      subcontainer: await sdk.SubContainer.of(
-        effects,
-        { imageId: 'web' },
-        webMounts,
-        'web-sub',
-      ),
+      subcontainer: webSub,
       exec: {
         command: sdk.useEntrypoint(),
+        runAsInit: true,
         env: {
           ...commonEnv,
           ENABLE_AUTH: '1',
@@ -167,7 +200,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
             errorMessage: i18n('The web interface is not ready'),
           }),
       },
-      requires: ['prosody'],
+      requires: ['nginx-patch', 'prosody'],
     })
     .addDaemon('jicofo', {
       subcontainer: await sdk.SubContainer.of(
@@ -178,8 +211,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
       ),
       exec: {
         command: sdk.useEntrypoint(),
+        runAsInit: true,
         env: {
           ...commonEnv,
+          ENABLE_AUTH: '1',
+          ENABLE_GUESTS: '1',
           JICOFO_AUTH_USER: 'focus',
           JICOFO_AUTH_PASSWORD,
         },
@@ -189,7 +225,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
         fn: () =>
           sdk.healthCheck.checkWebUrl(
             effects,
-            'http://127.0.0.1:8888/about/health',
+            `http://127.0.0.1:${jicofoHealthPort}/about/health`,
             {
               successMessage: i18n('The conference focus is ready'),
               errorMessage: i18n('The conference focus is not ready'),
@@ -207,22 +243,41 @@ export const main = sdk.setupMain(async ({ effects }) => {
       ),
       exec: {
         command: sdk.useEntrypoint(),
+        runAsInit: true,
         env: {
           ...commonEnv,
           JVB_AUTH_USER: 'jvb',
           JVB_AUTH_PASSWORD,
-          JVB_PORT: '10000',
+          JVB_PORT: String(jvbMediaPort),
           JVB_BREWERY_MUC: 'jvbbrewery',
           COLIBRI_REST_ENABLED: 'true',
+          ...(jvbPublicIps?.length
+            ? { JVB_ADVERTISE_IPS: jvbPublicIps.join(',') }
+            : {}),
         },
       },
       ready: {
         display: i18n('Video Bridge'),
-        fn: () =>
-          sdk.healthCheck.checkPortListening(effects, 8080, {
-            successMessage: i18n('The video bridge is ready'),
-            errorMessage: i18n('The video bridge is not ready'),
-          }),
+        fn: async () => {
+          const portCheck = await sdk.healthCheck.checkPortListening(
+            effects,
+            jvbHttpPort,
+            {
+              successMessage: i18n('The video bridge is ready'),
+              errorMessage: i18n('The video bridge is not ready'),
+            },
+          )
+          if (portCheck.result !== 'success') return portCheck
+          if (jvbMissingPublicIp) {
+            return {
+              result: 'failure' as const,
+              message: i18n(
+                'Required for clearnet. Enable a public IPv4 address in the "Video Bridge Media" interface.',
+              ),
+            }
+          }
+          return portCheck
+        },
       },
       requires: ['prosody'],
     })

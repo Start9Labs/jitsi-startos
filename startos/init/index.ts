@@ -6,11 +6,9 @@ import { actions } from '../actions'
 import { restoreInit } from '../backups'
 import { seedFiles } from './seedFiles'
 import { taskSetPassword } from './taskSetPassword'
-import { taskSetTurn } from './taskSetTurn'
 export const init = sdk.setupInit(
   seedFiles,
   taskSetPassword,
-  taskSetTurn,
   restoreInit,
   versionGraph,
   setInterfaces,

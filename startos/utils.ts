@@ -3,9 +3,13 @@ import { sdk } from './sdk'
 
 export const uiPort = 80
 export const turnPort = 3478
+export const jvbMediaPort = 10000
+export const jvbHttpPort = 8080
+export const jicofoHealthPort = 8888
 
 export const uiInterfaceId = 'ui'
 export const turnInterfaceId = 'turn'
+export const jvbMediaInterfaceId = 'jvb-media'
 
 export function getPassword() {
   return utils.getDefaultString({
@@ -57,3 +61,24 @@ export const coturnMounts = sdk.Mounts.of().mountVolume({
   mountpoint: '/var/lib/coturn',
   readonly: false,
 })
+
+export const prosodyPort = 5280
+
+export function prosodyEnv(passwords: {
+  JICOFO_AUTH_PASSWORD: string
+  JVB_AUTH_PASSWORD: string
+  TURN_SECRET: string
+}) {
+  return {
+    TZ: 'UTC',
+    ...xmppConfig,
+    ENABLE_AUTH: '1',
+    ENABLE_GUESTS: '1',
+    AUTH_TYPE: 'internal',
+    JICOFO_AUTH_USER: 'focus',
+    JICOFO_AUTH_PASSWORD: passwords.JICOFO_AUTH_PASSWORD,
+    JVB_AUTH_USER: 'jvb',
+    JVB_AUTH_PASSWORD: passwords.JVB_AUTH_PASSWORD,
+    TURN_SECRET: passwords.TURN_SECRET,
+  }
+}
