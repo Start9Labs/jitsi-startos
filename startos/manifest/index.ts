@@ -9,9 +9,7 @@ export const manifest = setupManifest({
   upstreamRepo: 'https://github.com/jitsi/docker-jitsi-meet',
   marketingUrl: 'https://jitsi.org/',
   donationUrl: null,
-  docsUrls: [
-    'https://jitsi.github.io/handbook/docs/devops-guide/devops-guide-docker',
-  ],
+  docsUrls: ['https://github.com/jitsi/handbook/tree/master/docs'],
   description: { short, long },
   volumes: ['main'],
   images: {
