@@ -12,14 +12,15 @@ Jitsi Meet is a free, open-source video conferencing platform that requires no a
 
 ## Container Runtime
 
-This package runs four containers that together provide the Jitsi Meet platform:
+This package runs five containers that together provide the Jitsi Meet platform:
 
 | Container | Image | Architectures | Purpose |
 | --------- | ----- | ------------- | ------- |
-| Prosody | `jitsi/prosody:stable-10741` | x86_64, aarch64 | XMPP signaling server |
-| Web | `jitsi/web:stable-10741` | x86_64, aarch64 | Nginx web frontend |
-| Jicofo | `jitsi/jicofo:stable-10741` | x86_64, aarch64 | Conference focus / room management |
-| JVB | `jitsi/jvb:stable-10741` | x86_64, aarch64 | Video bridge / media routing |
+| Prosody | `jitsi/prosody` | x86_64, aarch64 | XMPP signaling server |
+| Web | `jitsi/web` | x86_64, aarch64 | Nginx web frontend |
+| Jicofo | `jitsi/jicofo` | x86_64, aarch64 | Conference focus / room management |
+| JVB | `jitsi/jvb` | x86_64, aarch64 | Video bridge / media routing |
+| Coturn | `coturn/coturn` | x86_64, aarch64 | TURN relay server for NAT traversal |
 
 All containers communicate over localhost (shared network namespace).
 
@@ -29,17 +30,21 @@ All containers communicate over localhost (shared network namespace).
 | ------ | ----------- | ------- |
 | `main` | various | Persistent data for all components |
 
-Subdirectories within `main`: `prosody/`, `web/`, `jicofo/`, `jvb/`, and `store.json` (internal passwords).
+Subdirectories within `main`: `prosody/`, `web/`, `jicofo/`, `jvb/`, `coturn/`, and `store.json` (internal passwords).
 
 ## Network Interfaces
 
 | Interface | Port | Protocol | Purpose |
 | --------- | ---- | -------- | ------- |
 | Web UI | 80 | HTTP | Jitsi Meet web interface |
+| Video Bridge Media | 10000 | UDP | WebRTC media transport for video and audio |
+| TURN Relay | 3478 | TCP/TLS | TURN relay server for NAT traversal |
 
 ## Actions
 
-None.
+| Action | ID | Description |
+| ------ | -- | ----------- |
+| Reset Admin Password | `reset-password` | Create or reset the administrator password for creating meetings |
 
 ## Dependencies
 
@@ -55,8 +60,9 @@ The `main` volume is backed up.
 | ----- | ------ | ---- |
 | XMPP Server | Port listening | 5280 |
 | Web Interface | Port listening | 80 |
-| Conference Focus | Port listening | 8888 |
+| Conference Focus | HTTP check | 8888 (`/about/health`) |
 | Video Bridge | Port listening | 8080 |
+| TURN Server | Port listening | 3478 |
 
 ## Limitations
 
@@ -77,20 +83,25 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development wo
 ```yaml
 package_id: jitsi
 images:
-  web: jitsi/web:stable-10741
-  prosody: jitsi/prosody:stable-10741
-  jicofo: jitsi/jicofo:stable-10741
-  jvb: jitsi/jvb:stable-10741
+  web: jitsi/web
+  prosody: jitsi/prosody
+  jicofo: jitsi/jicofo
+  jvb: jitsi/jvb
+  coturn: coturn/coturn
 architectures: [x86_64, aarch64]
 volumes:
-  main: prosody/, web/, jicofo/, jvb/, store.json
+  main: prosody/, web/, jicofo/, jvb/, coturn/, store.json
 ports:
   ui: 80
-  internal: [5280, 8888, 8080, 10000/udp]
+  jvb_media: 10000/udp
+  turn: 3478
+  internal: [5280, 8888, 8080]
 dependencies: none
-actions: []
+actions:
+  - reset-password (enabled, any)
 health_checks:
-  - port_listening: [5280, 80, 8888, 8080]
+  - port_listening: [5280, 80, 8080, 3478]
+  - http_check: 8888 (/about/health)
 backup_volumes:
   - main
 ```
