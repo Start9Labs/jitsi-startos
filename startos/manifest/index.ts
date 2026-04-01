@@ -5,7 +5,7 @@ export const manifest = setupManifest({
   id: 'jitsi',
   title: 'Jitsi Meet',
   license: 'Apache-2.0',
-  packageRepo: 'https://github.com/Start9Labs/jitsi-startos/tree/update/040',
+  packageRepo: 'https://github.com/Start9Labs/jitsi-startos',
   upstreamRepo: 'https://github.com/jitsi/docker-jitsi-meet',
   marketingUrl: 'https://jitsi.org/',
   donationUrl: null,
@@ -14,19 +14,19 @@ export const manifest = setupManifest({
   volumes: ['main'],
   images: {
     web: {
-      source: { dockerTag: 'jitsi/web:stable-10741' },
+      source: { dockerTag: 'jitsi/web:stable-10888' },
       arch: ['x86_64', 'aarch64'],
     },
     prosody: {
-      source: { dockerTag: 'jitsi/prosody:stable-10741' },
+      source: { dockerTag: 'jitsi/prosody:stable-10888' },
       arch: ['x86_64', 'aarch64'],
     },
     jicofo: {
-      source: { dockerTag: 'jitsi/jicofo:stable-10741' },
+      source: { dockerTag: 'jitsi/jicofo:stable-10888' },
       arch: ['x86_64', 'aarch64'],
     },
     jvb: {
-      source: { dockerTag: 'jitsi/jvb:stable-10741' },
+      source: { dockerTag: 'jitsi/jvb:stable-10888' },
       arch: ['x86_64', 'aarch64'],
     },
     coturn: {
