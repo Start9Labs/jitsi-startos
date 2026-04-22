@@ -50,17 +50,16 @@ export const main = sdk.setupMain(async ({ effects }) => {
     .const()
   const jvbMissingPublicIp = uiIsPublic && !jvbPublicIps?.length
 
-  // Resolve the public domain from the TURN interface (if one is configured)
-  const turnHost = await sdk.serviceInterface
-    .getOwn(
-      effects,
-      turnInterfaceId,
-      (i) =>
-        i?.addressInfo
-          ?.filter({ visibility: 'public', kind: 'domain' })
-          .format('hostname-info')
-          .at(0)?.hostname,
-    )
+  // Resolve the public TLS-wrapped TURN endpoint (if one is configured).
+  // StartOS terminates TLS in front of coturn, so we advertise the SSL entry.
+  const turnEndpoint = await sdk.serviceInterface
+    .getOwn(effects, turnInterfaceId, (i) => {
+      const entry = i?.addressInfo
+        ?.filter({ visibility: 'public', kind: 'domain' })
+        .format('hostname-info')
+        .find((h) => h.ssl && h.port != null)
+      return entry ? { host: entry.hostname, port: entry.port! } : null
+    })
     .const()
 
   const commonEnv = {
@@ -125,7 +124,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       ),
       // Coturn listens on plain TCP; StartOS terminates TLS in front of it.
       // If no public domain is configured yet, coturn idles.
-      exec: turnHost
+      exec: turnEndpoint
         ? {
             command: [
               'turnserver',
@@ -140,7 +139,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
         : { command: ['sleep', 'infinity'] },
       ready: {
         display: i18n('TURN Server'),
-        fn: turnHost
+        fn: turnEndpoint
           ? () =>
               sdk.healthCheck.checkPortListening(effects, 3478, {
                 successMessage: i18n('The TURN server is ready'),
@@ -181,12 +180,14 @@ export const main = sdk.setupMain(async ({ effects }) => {
           // Internal nginx proxy target for BOSH requests → prosody
           XMPP_BOSH_URL_BASE: 'http://localhost:5280',
           // TURN config is injected into the client-side config.js so browsers
-          // know to request relay candidates from this server
-          ...(turnHost
+          // know to request relay candidates from this server. Port comes from
+          // the turn interface's SSL endpoint — the "preferred" external port
+          // in interfaces.ts is not guaranteed.
+          ...(turnEndpoint
             ? {
                 TURN_ENABLE: '1',
-                TURN_HOST: turnHost,
-                TURN_PORT: '443',
+                TURN_HOST: turnEndpoint.host,
+                TURN_PORT: String(turnEndpoint.port),
                 TURN_TRANSPORT: 'tcp',
               }
             : {}),
@@ -251,6 +252,10 @@ export const main = sdk.setupMain(async ({ effects }) => {
           JVB_PORT: String(jvbMediaPort),
           JVB_BREWERY_MUC: 'jvbbrewery',
           COLIBRI_REST_ENABLED: 'true',
+          // Don't advertise docker-internal host candidates (10.x LXC bridge,
+          // fc00::/7 IPv6 ULA). Clients can't route to them, and offering
+          // them as high-priority pairs can stall ICE/DTLS on some networks.
+          JVB_ADVERTISE_PRIVATE_CANDIDATES: 'false',
           ...(jvbPublicIps?.length
             ? { JVB_ADVERTISE_IPS: jvbPublicIps.join(',') }
             : {}),

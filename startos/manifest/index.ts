@@ -30,7 +30,7 @@ export const manifest = setupManifest({
       arch: ['x86_64', 'aarch64'],
     },
     coturn: {
-      source: { dockerTag: 'coturn/coturn:4.6.3' },
+      source: { dockerTag: 'coturn/coturn:4.10.0' },
       arch: ['x86_64', 'aarch64'],
     },
   },
