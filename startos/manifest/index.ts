@@ -9,7 +9,6 @@ export const manifest = setupManifest({
   upstreamRepo: 'https://github.com/jitsi/docker-jitsi-meet',
   marketingUrl: 'https://jitsi.org/',
   donationUrl: null,
-  docsUrls: ['https://github.com/jitsi/handbook/tree/master/docs'],
   description: { short, long },
   volumes: ['main'],
   images: {
@@ -30,7 +29,7 @@ export const manifest = setupManifest({
       arch: ['x86_64', 'aarch64'],
     },
     coturn: {
-      source: { dockerTag: 'coturn/coturn:4.10.0' },
+      source: { dockerTag: 'coturn/coturn:4.11.0' },
       arch: ['x86_64', 'aarch64'],
     },
   },
