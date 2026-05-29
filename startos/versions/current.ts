@@ -1,6 +1,6 @@
 import { VersionInfo, IMPOSSIBLE } from '@start9labs/start-sdk'
 
-export const v_2_0_10978_1 = VersionInfo.of({
+export const current = VersionInfo.of({
   version: '2.0.10978:1',
   releaseNotes: {
     en_US: 'Bumps Coturn → 4.12.0.',
