@@ -1,6 +1,6 @@
 import { VersionInfo, IMPOSSIBLE } from '@start9labs/start-sdk'
 
-export const v_2_0_10978_0 = VersionInfo.of({
+export const current = VersionInfo.of({
   version: '2.0.10978:0',
   releaseNotes: {
     en_US: 'Bumps Jitsi Meet → stable-10978.',
