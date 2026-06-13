@@ -13,23 +13,23 @@ export const manifest = setupManifest({
   volumes: ['main'],
   images: {
     web: {
-      source: { dockerTag: 'jitsi/web:stable-10978' },
+      source: { dockerTag: 'jitsi/web:stable-11031' },
       arch: ['x86_64', 'aarch64'],
     },
     prosody: {
-      source: { dockerTag: 'jitsi/prosody:stable-10978' },
+      source: { dockerTag: 'jitsi/prosody:stable-11031' },
       arch: ['x86_64', 'aarch64'],
     },
     jicofo: {
-      source: { dockerTag: 'jitsi/jicofo:stable-10978' },
+      source: { dockerTag: 'jitsi/jicofo:stable-11031' },
       arch: ['x86_64', 'aarch64'],
     },
     jvb: {
-      source: { dockerTag: 'jitsi/jvb:stable-10978' },
+      source: { dockerTag: 'jitsi/jvb:stable-11031' },
       arch: ['x86_64', 'aarch64'],
     },
     coturn: {
-      source: { dockerTag: 'coturn/coturn:4.11.0' },
+      source: { dockerTag: 'coturn/coturn:4.12.0' },
       arch: ['x86_64', 'aarch64'],
     },
   },
