@@ -1,38 +1,38 @@
 import { VersionInfo, IMPOSSIBLE } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '2.0.11031:0',
+  version: '2.0.11031:1',
   releaseNotes: {
-    en_US: `Updated Jitsi Meet to stable-11031 and Coturn to 4.12.0.
+    en_US: `Updated Coturn to 4.13.0.
 
-- Jitsi Meet → stable-11031: upgraded whiteboard; "mid" RTP header extension now disabled by default.
-- Coturn → 4.12.0: higher-throughput UDP relay paths and a new multiplex-peer mode.
+- Security hardening: port parsing, admin brute-force throttling, credential log redaction, constant-time comparison, OAuth bounds checks.
+- Further UDP relay performance gains; \`--udp-recvmmsg\` now enabled by default on Linux.
 
-Full changelog: https://github.com/jitsi/docker-jitsi-meet/compare/stable-10978...stable-11031`,
-    es_ES: `Actualiza Jitsi Meet a stable-11031 y Coturn a 4.12.0.
+Full changelog: https://github.com/coturn/coturn/compare/4.12.0...4.13.0`,
+    es_ES: `Actualiza Coturn a 4.13.0.
 
-- Jitsi Meet → stable-11031: pizarra actualizada; la extensión de cabecera RTP "mid" ahora está desactivada por defecto.
-- Coturn → 4.12.0: rutas de retransmisión UDP de mayor rendimiento y un nuevo modo multiplex-peer.
+- Refuerzo de seguridad: análisis de puertos, limitación de fuerza bruta en administración, ocultación de credenciales en registros, comparación en tiempo constante, comprobaciones de límites de OAuth.
+- Más mejoras de rendimiento en la retransmisión UDP; \`--udp-recvmmsg\` ahora activado por defecto en Linux.
 
-Registro de cambios completo: https://github.com/jitsi/docker-jitsi-meet/compare/stable-10978...stable-11031`,
-    de_DE: `Aktualisiert Jitsi Meet auf stable-11031 und Coturn auf 4.12.0.
+Registro de cambios completo: https://github.com/coturn/coturn/compare/4.12.0...4.13.0`,
+    de_DE: `Aktualisiert Coturn auf 4.13.0.
 
-- Jitsi Meet → stable-11031: Whiteboard aktualisiert; die RTP-Header-Erweiterung "mid" ist jetzt standardmäßig deaktiviert.
-- Coturn → 4.12.0: durchsatzstärkere UDP-Relay-Pfade und ein neuer multiplex-peer-Modus.
+- Sicherheitshärtung: Port-Parsing, Admin-Brute-Force-Drosselung, Schwärzung von Anmeldedaten in Logs, konstantzeitiger Vergleich, OAuth-Grenzwertprüfungen.
+- Weitere UDP-Relay-Leistungssteigerungen; \`--udp-recvmmsg\` ist unter Linux jetzt standardmäßig aktiviert.
 
-Vollständiges Änderungsprotokoll: https://github.com/jitsi/docker-jitsi-meet/compare/stable-10978...stable-11031`,
-    pl_PL: `Aktualizuje Jitsi Meet do stable-11031 i Coturn do 4.12.0.
+Vollständiges Änderungsprotokoll: https://github.com/coturn/coturn/compare/4.12.0...4.13.0`,
+    pl_PL: `Aktualizuje Coturn do 4.13.0.
 
-- Jitsi Meet → stable-11031: zaktualizowana tablica; rozszerzenie nagłówka RTP "mid" jest teraz domyślnie wyłączone.
-- Coturn → 4.12.0: wydajniejsze ścieżki przekazywania UDP i nowy tryb multiplex-peer.
+- Wzmocnienie bezpieczeństwa: parsowanie portów, ograniczanie ataków siłowych na konto administratora, ukrywanie danych uwierzytelniających w logach, porównanie w stałym czasie, kontrola zakresów OAuth.
+- Dalsze zwiększenie wydajności przekazywania UDP; \`--udp-recvmmsg\` jest teraz domyślnie włączone w systemie Linux.
 
-Pełny dziennik zmian: https://github.com/jitsi/docker-jitsi-meet/compare/stable-10978...stable-11031`,
-    fr_FR: `Met à jour Jitsi Meet vers stable-11031 et Coturn vers 4.12.0.
+Pełny dziennik zmian: https://github.com/coturn/coturn/compare/4.12.0...4.13.0`,
+    fr_FR: `Met à jour Coturn vers 4.13.0.
 
-- Jitsi Meet → stable-11031 : tableau blanc mis à jour ; l'extension d'en-tête RTP « mid » est désormais désactivée par défaut.
-- Coturn → 4.12.0 : chemins de relais UDP à plus haut débit et nouveau mode multiplex-peer.
+- Renforcement de la sécurité : analyse des ports, limitation des attaques par force brute sur l'administration, masquage des identifiants dans les journaux, comparaison à temps constant, vérifications des limites OAuth.
+- Nouveaux gains de performance du relais UDP ; \`--udp-recvmmsg\` est désormais activé par défaut sous Linux.
 
-Journal des modifications complet : https://github.com/jitsi/docker-jitsi-meet/compare/stable-10978...stable-11031`,
+Journal des modifications complet : https://github.com/coturn/coturn/compare/4.12.0...4.13.0`,
   },
   migrations: {
     up: async ({ effects }) => {},
