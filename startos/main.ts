@@ -6,14 +6,17 @@ import {
   jicofoHealthPort,
   jicofoMounts,
   jvbHttpPort,
+  jvbMediaHostId,
   jvbMediaInterfaceId,
   jvbMediaPort,
   jvbMounts,
   prosodyEnv,
   prosodyMounts,
   prosodyPort,
+  turnHostId,
   turnInterfaceId,
   turnPort,
+  uiHostId,
   uiInterfaceId,
   uiPort,
   webMounts,
@@ -31,31 +34,46 @@ export const main = sdk.setupMain(async ({ effects }) => {
 
   // Resolve public IPs from the JVB media interface so JVB advertises
   // the correct addresses instead of the STUN-discovered one
-  const jvbPublicIps = await sdk.serviceInterface
-    .getOwn(effects, jvbMediaInterfaceId, (i) =>
-      i?.addressInfo
-        ?.filter({ visibility: 'public', kind: 'ipv4' })
+  const jvbPublicIps = await sdk.host
+    .getOwn(effects, jvbMediaHostId, (host) => {
+      const iface =
+        host &&
+        Object.values(host.bindings)
+          .flatMap((b) => Object.values(b.interfaces))
+          .find((i) => i.id === jvbMediaInterfaceId)
+      return iface?.addressInfo
+        .filter({ visibility: 'public', kind: 'ipv4' })
         .format('hostname-info')
-        .map((h) => h.hostname),
-    )
+        .map((h) => h.hostname)
+    })
     .const()
 
   // If the UI is publicly accessible but JVB has no public IPv4, calls will fail
-  const uiIsPublic = await sdk.serviceInterface
-    .getOwn(effects, uiInterfaceId, (i) =>
-      !!i?.addressInfo
-        ?.filter({ visibility: 'public' })
-        .format('hostname-info').length,
-    )
+  const uiIsPublic = await sdk.host
+    .getOwn(effects, uiHostId, (host) => {
+      const iface =
+        host &&
+        Object.values(host.bindings)
+          .flatMap((b) => Object.values(b.interfaces))
+          .find((i) => i.id === uiInterfaceId)
+      return !!iface?.addressInfo
+        .filter({ visibility: 'public' })
+        .format('hostname-info').length
+    })
     .const()
   const jvbMissingPublicIp = uiIsPublic && !jvbPublicIps?.length
 
   // Resolve the public TLS-wrapped TURN endpoint (if one is configured).
   // StartOS terminates TLS in front of coturn, so we advertise the SSL entry.
-  const turnEndpoint = await sdk.serviceInterface
-    .getOwn(effects, turnInterfaceId, (i) => {
-      const entry = i?.addressInfo
-        ?.filter({ visibility: 'public', kind: 'domain' })
+  const turnEndpoint = await sdk.host
+    .getOwn(effects, turnHostId, (host) => {
+      const iface =
+        host &&
+        Object.values(host.bindings)
+          .flatMap((b) => Object.values(b.interfaces))
+          .find((i) => i.id === turnInterfaceId)
+      const entry = iface?.addressInfo
+        .filter({ visibility: 'public', kind: 'domain' })
         .format('hostname-info')
         .find((h) => h.ssl && h.port != null)
       return entry ? { host: entry.hostname, port: entry.port! } : null
@@ -67,7 +85,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
     ...xmppConfig,
   }
 
-  const webSub = await sdk.SubContainer.of(
+  const webSub = sdk.SubContainer.of(
     effects,
     { imageId: 'web' },
     webMounts,
@@ -89,7 +107,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       requires: [],
     })
     .addDaemon('prosody', {
-      subcontainer: await sdk.SubContainer.of(
+      subcontainer: sdk.SubContainer.of(
         effects,
         { imageId: 'prosody' },
         prosodyMounts,
@@ -116,7 +134,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       requires: [],
     })
     .addDaemon('coturn', {
-      subcontainer: await sdk.SubContainer.of(
+      subcontainer: sdk.SubContainer.of(
         effects,
         { imageId: 'coturn' },
         coturnMounts,
@@ -204,7 +222,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       requires: ['nginx-patch', 'prosody'],
     })
     .addDaemon('jicofo', {
-      subcontainer: await sdk.SubContainer.of(
+      subcontainer: sdk.SubContainer.of(
         effects,
         { imageId: 'jicofo' },
         jicofoMounts,
@@ -236,7 +254,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       requires: ['prosody'],
     })
     .addDaemon('jvb', {
-      subcontainer: await sdk.SubContainer.of(
+      subcontainer: sdk.SubContainer.of(
         effects,
         { imageId: 'jvb' },
         jvbMounts,

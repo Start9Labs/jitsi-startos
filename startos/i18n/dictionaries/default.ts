@@ -33,6 +33,7 @@ const dict = {
 
   // init
   'Create an admin password so only you can start meetings.': 27,
+  'Generating XMPP configuration': 40,
 
   // actions (auth)
   'Reset Admin Password': 28,

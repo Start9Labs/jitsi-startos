@@ -7,6 +7,11 @@ export const jvbMediaPort = 10000
 export const jvbHttpPort = 8080
 export const jicofoHealthPort = 8888
 
+// Host ids (the sdk.MultiHost.of groups) — distinct from the interface ids exported on them.
+export const uiHostId = 'ui-multi'
+export const turnHostId = 'turn-multi'
+export const jvbMediaHostId = 'jvb-media-multi'
+
 export const uiInterfaceId = 'ui'
 export const turnInterfaceId = 'turn'
 export const jvbMediaInterfaceId = 'jvb-media'

@@ -1,17 +1,20 @@
 import { i18n } from './i18n'
 import { sdk } from './sdk'
 import {
+  jvbMediaHostId,
   jvbMediaInterfaceId,
   jvbMediaPort,
+  turnHostId,
   turnInterfaceId,
   turnPort,
+  uiHostId,
   uiInterfaceId,
   uiPort,
 } from './utils'
 
 export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
   // Web UI
-  const uiMulti = sdk.MultiHost.of(effects, 'ui-multi')
+  const uiMulti = sdk.MultiHost.of(effects, uiHostId)
   const uiOrigin = await uiMulti.bindPort(uiPort, {
     protocol: 'http',
   })
@@ -30,7 +33,7 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
   ])
 
   // JVB media
-  const jvbMulti = sdk.MultiHost.of(effects, 'jvb-media-multi')
+  const jvbMulti = sdk.MultiHost.of(effects, jvbMediaHostId)
   const jvbOrigin = await jvbMulti.bindPort(jvbMediaPort, {
     protocol: null,
     preferredExternalPort: jvbMediaPort,
@@ -54,7 +57,7 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
   const receipts = [uiReceipt, jvbReceipt]
 
   // TURN relay
-  const turnMulti = sdk.MultiHost.of(effects, 'turn-multi')
+  const turnMulti = sdk.MultiHost.of(effects, turnHostId)
   const turnOrigin = await turnMulti.bindPort(turnPort, {
     protocol: null,
     preferredExternalPort: turnPort,
