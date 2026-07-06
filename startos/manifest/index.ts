@@ -28,10 +28,16 @@ export const manifest = setupManifest({
       source: { dockerTag: 'jitsi/jvb:stable-11031' },
       arch: ['x86_64', 'aarch64'],
     },
+  },
+  dependencies: {
     coturn: {
-      source: { dockerTag: 'coturn/coturn:4.14.0' },
-      arch: ['x86_64', 'aarch64'],
+      description:
+        'Provides a TURN/STUN relay so calls connect through NAT and restrictive firewalls',
+      optional: false,
+      metadata: {
+        title: 'Coturn',
+        icon: 'https://raw.githubusercontent.com/Start9Labs/coturn-startos/master/icon.svg',
+      },
     },
   },
-  dependencies: {},
 })

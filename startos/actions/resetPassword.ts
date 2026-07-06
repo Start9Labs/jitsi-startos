@@ -10,7 +10,9 @@ export const resetPassword = sdk.Action.withoutInput(
     const hasPass = await storeJson.read((s) => s.ADMIN_PASSWORD).const(effects)
 
     return {
-      name: hasPass ? i18n('Reset Admin Password') : i18n('Create Admin Password'),
+      name: hasPass
+        ? i18n('Reset Admin Password')
+        : i18n('Create Admin Password'),
       description: hasPass
         ? i18n('Reset the administrator password for creating meetings')
         : i18n('Create the administrator password for creating meetings'),

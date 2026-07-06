@@ -7,12 +7,10 @@ export const seedFiles = sdk.setupOnInit(async (effects, kind, progress) => {
   if (kind === 'install') {
     const JICOFO_AUTH_PASSWORD = getPassword()
     const JVB_AUTH_PASSWORD = getPassword()
-    const TURN_SECRET = getPassword()
 
     await storeJson.merge(effects, {
       JICOFO_AUTH_PASSWORD,
       JVB_AUTH_PASSWORD,
-      TURN_SECRET,
     })
 
     // Start prosody briefly so its entrypoint generates config files.
@@ -30,7 +28,7 @@ export const seedFiles = sdk.setupOnInit(async (effects, kind, progress) => {
         exec: {
           command: sdk.useEntrypoint(),
           runAsInit: true,
-          env: prosodyEnv({ JICOFO_AUTH_PASSWORD, JVB_AUTH_PASSWORD, TURN_SECRET }),
+          env: prosodyEnv({ JICOFO_AUTH_PASSWORD, JVB_AUTH_PASSWORD }),
         },
         ready: {
           display: null,
