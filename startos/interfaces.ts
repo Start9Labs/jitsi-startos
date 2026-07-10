@@ -4,9 +4,6 @@ import {
   jvbMediaHostId,
   jvbMediaInterfaceId,
   jvbMediaPort,
-  turnHostId,
-  turnInterfaceId,
-  turnPort,
   uiHostId,
   uiInterfaceId,
   uiPort,
@@ -54,35 +51,5 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
     }),
   ])
 
-  const receipts = [uiReceipt, jvbReceipt]
-
-  // TURN relay
-  const turnMulti = sdk.MultiHost.of(effects, turnHostId)
-  const turnOrigin = await turnMulti.bindPort(turnPort, {
-    protocol: null,
-    preferredExternalPort: turnPort,
-    addSsl: {
-      preferredExternalPort: turnPort,
-      alpn: null,
-      addXForwardedHeaders: false,
-      auth: null,
-    },
-    secure: null,
-  })
-  const turnReceipt = await turnOrigin.export([
-    sdk.createInterface(effects, {
-      name: i18n('TURN Relay'),
-      id: turnInterfaceId,
-      description: i18n('TURN relay server for NAT traversal'),
-      type: 'api',
-      masked: false,
-      schemeOverride: null,
-      username: null,
-      path: '',
-      query: {},
-    }),
-  ])
-  receipts.push(turnReceipt)
-
-  return receipts
+  return [uiReceipt, jvbReceipt]
 })
