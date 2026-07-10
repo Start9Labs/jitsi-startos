@@ -7,7 +7,6 @@ import {
   coturnMountpoint,
   coturnSecretPath,
   coturnTurnInterfaceId,
-  coturnTurnsInterfaceId,
   jicofoHealthPort,
   jicofoMounts,
   jvbHttpPort,
@@ -65,37 +64,36 @@ export const main = sdk.setupMain(async ({ effects }) => {
     .const()
   const jvbMissingPublicIp = uiIsPublic && !jvbPublicIps?.length
 
-  // Resolve the external Coturn package's public TURN endpoint (domain + ports).
-  // Coturn's ports are raw (it terminates TLS itself), so we don't require ssl.
+  // Resolve the external Coturn package's public TURN endpoint. Coturn exposes a
+  // single `turn` interface whose public-domain address set carries both the
+  // plain turn: address (ssl:false, 3478) and the edge-terminated turns: address
+  // (ssl:true, 5349); pick each by its ssl flag, both on the same domain.
   const coturnEndpoint = await sdk.host
     .get(effects, { hostId: coturnHostId, packageId: coturnId }, (host) => {
-      const ifaces =
+      const iface =
         host &&
-        Object.values(host.bindings).flatMap((b) => Object.values(b.interfaces))
-      const resolve = (id: string) => {
-        const iface = ifaces?.find((i) => i.id === id)
-        const entry = iface?.addressInfo
-          .filter({ visibility: 'public', kind: 'domain' })
-          .format('hostname-info')[0]
-        return entry && entry.port != null
-          ? { host: entry.hostname, port: entry.port }
-          : null
+        Object.values(host.bindings)
+          .flatMap((b) => Object.values(b.interfaces))
+          .find((i) => i.id === coturnTurnInterfaceId)
+      const domains = iface
+        ? iface.addressInfo
+            .filter({ visibility: 'public', kind: 'domain' })
+            .hostnames.filter((h) => h.port != null)
+        : []
+      const domain = domains[0]?.hostname ?? null
+      if (!domain) return null
+      const forDomain = domains.filter((h) => h.hostname === domain)
+      return {
+        domain,
+        turnPort: forDomain.find((h) => !h.ssl)?.port ?? null,
+        turnsPort: forDomain.find((h) => h.ssl)?.port ?? null,
       }
-      const turns = resolve(coturnTurnsInterfaceId)
-      const turn = resolve(coturnTurnInterfaceId)
-      const domain = turns?.host ?? turn?.host ?? null
-      return domain
-        ? {
-            domain,
-            turnPort: turn?.port ?? null,
-            turnsPort: turns?.port ?? null,
-          }
-        : null
     })
     .const()
 
-  // Read Coturn's shared TURN secret from its volume (mounted read-only into a
-  // throwaway container so a missing Coturn can never break the prosody daemon).
+  // Read Coturn's shared TURN secret. Mount only the `shared` subpath read-only
+  // into a throwaway container, so a missing Coturn can never break the prosody
+  // daemon and we never touch the rest of Coturn's volume.
   const coturnSecret = await readCoturnSecret()
   async function readCoturnSecret(): Promise<string | null> {
     const reader = sdk.SubContainer.of(
@@ -104,7 +102,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       sdk.Mounts.of().mountDependency({
         dependencyId: coturnId,
         volumeId: 'main',
-        subpath: null,
+        subpath: 'shared',
         mountpoint: coturnMountpoint,
         readonly: true,
       }),
@@ -112,7 +110,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
     )
     try {
       const { stdout } = await reader.execFail(['cat', coturnSecretPath])
-      return JSON.parse(stdout.toString())?.TURN_SECRET ?? null
+      return stdout.toString().trim() || null
     } catch {
       return null
     } finally {

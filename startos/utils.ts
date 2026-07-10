@@ -18,12 +18,12 @@ export const coturnId = 'coturn'
 export const coturnVersionRange = '>=4.14.0:0'
 export const coturnHostId = 'turn'
 export const coturnTurnInterfaceId = 'turn'
-export const coturnTurnsInterfaceId = 'turns'
-// Coturn's whole `main` volume is mounted read-only as a directory (a
-// single-file bind mount needs the target file to pre-exist in the container);
-// the shared secret lives in store.json at the volume root.
+// Coturn publishes its shared secret at `shared/turn-secret` on its `main`
+// volume. We mount only that subpath read-only (a directory bind — dependency
+// mounts are always directory mounts), so we never see the rest of Coturn's
+// volume (turnserver.conf, the coturn database).
 export const coturnMountpoint = '/mnt/coturn'
-export const coturnSecretPath = '/mnt/coturn/store.json'
+export const coturnSecretPath = '/mnt/coturn/turn-secret'
 
 export function getPassword() {
   return utils.getDefaultString({
@@ -106,12 +106,11 @@ export function prosodyEnv(opts: {
     // Coturn serves plain TURN on 3478 over both UDP and TCP; advertise both so
     // clients prefer lower-latency UDP and fall back to TCP.
     env.TURN_TRANSPORT = 'udp,tcp'
-    const stunPort = turn.turnPort ?? turn.turnsPort
-    if (stunPort) {
-      env.STUN_HOST = turn.domain
-      env.STUN_PORT = String(stunPort)
-    }
+    // STUN reflexive discovery and plain TURN both use the plain UDP/TCP port;
+    // the turns: port (5349) is TLS-over-TCP only.
     if (turn.turnPort) {
+      env.STUN_HOST = turn.domain
+      env.STUN_PORT = String(turn.turnPort)
       env.TURN_HOST = turn.domain
       env.TURN_PORT = String(turn.turnPort)
     }
