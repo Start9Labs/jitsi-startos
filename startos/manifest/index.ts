@@ -36,7 +36,7 @@ export const manifest = setupManifest({
       optional: false,
       metadata: {
         title: 'Coturn',
-        icon: 'https://raw.githubusercontent.com/Start9Labs/coturn-startos/master/icon.svg',
+        icon: 'https://raw.githubusercontent.com/Start9Labs/coturn-startos/d67ecaca5800a87e3300ce44c62484888f35d51b/icon.svg',
       },
     },
   },
