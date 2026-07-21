@@ -1,12 +1,10 @@
 # Updating the upstream version
 
-Jitsi Meet ships as four coordinated upstream images plus a sidecar TURN server. They're all pinned by `dockerTag` in `startos/manifest/index.ts`.
+Jitsi Meet ships as four coordinated upstream images, all pinned by `dockerTag` in `startos/manifest/index.ts`. (The TURN server is no longer bundled — it lives in the separate [`coturn-startos`](https://github.com/Start9Labs/coturn-startos) package, which Jitsi depends on and which is versioned there.)
 
 ## Determining the upstream version
 
-Two independent upstream sources drive this package:
-
-- **Jitsi** — the four coordinated images (`jitsi/web`, `jitsi/prosody`, `jitsi/jicofo`, `jitsi/jvb`) are built and tagged together by [`jitsi/docker-jitsi-meet`](https://github.com/jitsi/docker-jitsi-meet). Each release is a `stable-<build>` tag (e.g. `stable-10888`) that all four images share. The current pin lives in `startos/manifest/index.ts` on the `web`, `prosody`, `jicofo`, and `jvb` image entries.
+- **Jitsi** — the four coordinated images (`jitsi/web`, `jitsi/prosody`, `jitsi/jicofo`, `jitsi/jvb`) are built and tagged together by [`jitsi/docker-jitsi-meet`](https://github.com/jitsi/docker-jitsi-meet). Each release is a `stable-<build>` tag (e.g. `stable-11031`) that all four images share. The current pin lives in `startos/manifest/index.ts` on the `web`, `prosody`, `jicofo`, and `jvb` image entries.
 
   ```bash
   gh release view -R jitsi/docker-jitsi-meet --json tagName -q .tagName
@@ -14,17 +12,13 @@ Two independent upstream sources drive this package:
   gh release list -R jitsi/docker-jitsi-meet
   ```
 
-- **Coturn** — the TURN sidecar is pinned independently to `coturn/coturn:<version>` from [`coturn/coturn`](https://github.com/coturn/coturn). The current pin lives in `startos/manifest/index.ts` on the `coturn` image entry.
-
-  ```bash
-  gh release view -R coturn/coturn --json tagName -q .tagName
-  ```
-
 ## Applying the bump
 
-1. Find the latest `stable-<build>` tag published by [docker-jitsi-meet](https://github.com/jitsi/docker-jitsi-meet) (e.g. `stable-10888`). All four Jitsi images share that build number and must be bumped together:
-   - `jitsi/web:stable-<build>`
-   - `jitsi/prosody:stable-<build>`
-   - `jitsi/jicofo:stable-<build>`
-   - `jitsi/jvb:stable-<build>`
-2. Bump the `coturn/coturn:<version>` tag independently when there's a new coturn release worth tracking.
+Find the latest `stable-<build>` tag published by [docker-jitsi-meet](https://github.com/jitsi/docker-jitsi-meet) (e.g. `stable-11031`). All four Jitsi images share that build number and must be bumped together:
+
+- `jitsi/web:stable-<build>`
+- `jitsi/prosody:stable-<build>`
+- `jitsi/jicofo:stable-<build>`
+- `jitsi/jvb:stable-<build>`
+
+If the Coturn dependency's minimum version needs to change, update `coturnVersionRange` in `startos/utils.ts`.

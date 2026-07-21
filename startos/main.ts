@@ -2,18 +2,22 @@ import { storeJson } from './fileModels/store.json'
 import { i18n } from './i18n'
 import { sdk } from './sdk'
 import {
-  coturnMounts,
+  coturnHostId,
+  coturnId,
+  coturnMountpoint,
+  coturnSecretPath,
+  coturnTurnInterfaceId,
   jicofoHealthPort,
   jicofoMounts,
   jvbHttpPort,
+  jvbMediaHostId,
   jvbMediaInterfaceId,
   jvbMediaPort,
   jvbMounts,
   prosodyEnv,
   prosodyMounts,
   prosodyPort,
-  turnInterfaceId,
-  turnPort,
+  uiHostId,
   uiInterfaceId,
   uiPort,
   webMounts,
@@ -27,47 +31,104 @@ export const main = sdk.setupMain(async ({ effects }) => {
   if (!store) {
     throw new Error('store.json not found')
   }
-  const { JICOFO_AUTH_PASSWORD, JVB_AUTH_PASSWORD, TURN_SECRET } = store
+  const { JICOFO_AUTH_PASSWORD, JVB_AUTH_PASSWORD } = store
 
   // Resolve public IPs from the JVB media interface so JVB advertises
   // the correct addresses instead of the STUN-discovered one
-  const jvbPublicIps = await sdk.serviceInterface
-    .getOwn(effects, jvbMediaInterfaceId, (i) =>
-      i?.addressInfo
-        ?.filter({ visibility: 'public', kind: 'ipv4' })
+  const jvbPublicIps = await sdk.host
+    .getOwn(effects, jvbMediaHostId, (host) => {
+      const iface =
+        host &&
+        Object.values(host.bindings)
+          .flatMap((b) => Object.values(b.interfaces))
+          .find((i) => i.id === jvbMediaInterfaceId)
+      return iface?.addressInfo
+        .filter({ visibility: 'public', kind: 'ipv4' })
         .format('hostname-info')
-        .map((h) => h.hostname),
-    )
+        .map((h) => h.hostname)
+    })
     .const()
 
   // If the UI is publicly accessible but JVB has no public IPv4, calls will fail
-  const uiIsPublic = await sdk.serviceInterface
-    .getOwn(effects, uiInterfaceId, (i) =>
-      !!i?.addressInfo
-        ?.filter({ visibility: 'public' })
-        .format('hostname-info').length,
-    )
+  const uiIsPublic = await sdk.host
+    .getOwn(effects, uiHostId, (host) => {
+      const iface =
+        host &&
+        Object.values(host.bindings)
+          .flatMap((b) => Object.values(b.interfaces))
+          .find((i) => i.id === uiInterfaceId)
+      return !!iface?.addressInfo
+        .filter({ visibility: 'public' })
+        .format('hostname-info').length
+    })
     .const()
   const jvbMissingPublicIp = uiIsPublic && !jvbPublicIps?.length
 
-  // Resolve the public TLS-wrapped TURN endpoint (if one is configured).
-  // StartOS terminates TLS in front of coturn, so we advertise the SSL entry.
-  const turnEndpoint = await sdk.serviceInterface
-    .getOwn(effects, turnInterfaceId, (i) => {
-      const entry = i?.addressInfo
-        ?.filter({ visibility: 'public', kind: 'domain' })
-        .format('hostname-info')
-        .find((h) => h.ssl && h.port != null)
-      return entry ? { host: entry.hostname, port: entry.port! } : null
+  // Resolve the external Coturn package's public TURN endpoint. Coturn exposes a
+  // single `turn` interface whose public-domain address set carries both the
+  // plain turn: address (ssl:false, 3478) and the edge-terminated turns: address
+  // (ssl:true, 5349); pick each by its ssl flag, both on the same domain.
+  const coturnEndpoint = await sdk.host
+    .get(effects, { hostId: coturnHostId, packageId: coturnId }, (host) => {
+      const iface =
+        host &&
+        Object.values(host.bindings)
+          .flatMap((b) => Object.values(b.interfaces))
+          .find((i) => i.id === coturnTurnInterfaceId)
+      const domains = iface
+        ? iface.addressInfo
+            .filter({ visibility: 'public', kind: 'domain' })
+            .hostnames.filter((h) => h.port != null)
+        : []
+      const domain = domains[0]?.hostname ?? null
+      if (!domain) return null
+      const forDomain = domains.filter((h) => h.hostname === domain)
+      return {
+        domain,
+        turnPort: forDomain.find((h) => !h.ssl)?.port ?? null,
+        turnsPort: forDomain.find((h) => h.ssl)?.port ?? null,
+      }
     })
     .const()
+
+  // Read Coturn's shared TURN secret. Mount only the `shared` subpath read-only
+  // into a throwaway container, so a missing Coturn can never break the prosody
+  // daemon and we never touch the rest of Coturn's volume.
+  const coturnSecret = await readCoturnSecret()
+  async function readCoturnSecret(): Promise<string | null> {
+    const reader = sdk.SubContainer.of(
+      effects,
+      { imageId: 'prosody' },
+      sdk.Mounts.of().mountDependency({
+        dependencyId: coturnId,
+        volumeId: 'main',
+        subpath: 'shared',
+        mountpoint: coturnMountpoint,
+        readonly: true,
+      }),
+      'coturn-secret-read',
+    )
+    try {
+      const { stdout } = await reader.execFail(['cat', coturnSecretPath])
+      return stdout.toString().trim() || null
+    } catch {
+      return null
+    } finally {
+      await reader.destroy().catch(() => {})
+    }
+  }
+
+  const turn =
+    coturnEndpoint && coturnSecret
+      ? { ...coturnEndpoint, secret: coturnSecret }
+      : null
 
   const commonEnv = {
     TZ: 'UTC',
     ...xmppConfig,
   }
 
-  const webSub = await sdk.SubContainer.of(
+  const webSub = sdk.SubContainer.of(
     effects,
     { imageId: 'web' },
     webMounts,
@@ -89,7 +150,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       requires: [],
     })
     .addDaemon('prosody', {
-      subcontainer: await sdk.SubContainer.of(
+      subcontainer: sdk.SubContainer.of(
         effects,
         { imageId: 'prosody' },
         prosodyMounts,
@@ -101,7 +162,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
         env: prosodyEnv({
           JICOFO_AUTH_PASSWORD,
           JVB_AUTH_PASSWORD,
-          TURN_SECRET,
+          turn,
         }),
       },
       ready: {
@@ -112,51 +173,6 @@ export const main = sdk.setupMain(async ({ effects }) => {
             successMessage: i18n('The XMPP server is ready'),
             errorMessage: i18n('The XMPP server is not ready'),
           }),
-      },
-      requires: [],
-    })
-    .addDaemon('coturn', {
-      subcontainer: await sdk.SubContainer.of(
-        effects,
-        { imageId: 'coturn' },
-        coturnMounts,
-        'coturn-sub',
-      ),
-      // Coturn listens on plain TCP; StartOS terminates TLS in front of it.
-      // If no public domain is configured yet, coturn idles.
-      exec: turnEndpoint
-        ? {
-            command: [
-              'turnserver',
-              '-n',
-              '--log-file=stdout',
-              '--lt-cred-mech', // time-limited credentials via shared secret
-              `--realm=${xmppConfig.XMPP_DOMAIN}`,
-              `--static-auth-secret=${TURN_SECRET}`,
-              `--listening-port=${turnPort}`,
-            ],
-          }
-        : { command: ['sleep', 'infinity'] },
-      ready: {
-        display: i18n('TURN Server'),
-        fn: turnEndpoint
-          ? () =>
-              sdk.healthCheck.checkPortListening(effects, 3478, {
-                successMessage: i18n('The TURN server is ready'),
-                errorMessage: i18n('The TURN server is not ready'),
-              })
-          : async () =>
-              uiIsPublic
-                ? {
-                    result: 'failure' as const,
-                    message: i18n(
-                      'Required to support mobile carriers, hotel WiFi, and UDP-blocking firewalls. To enable, add a public domain to the "TURN Relay" interface.',
-                    ),
-                  }
-                : {
-                    result: 'disabled' as const,
-                    message: i18n('Only needed if using a public domain.'),
-                  },
       },
       requires: [],
     })
@@ -179,18 +195,6 @@ export const main = sdk.setupMain(async ({ effects }) => {
           ENABLE_XMPP_WEBSOCKET: '0',
           // Internal nginx proxy target for BOSH requests → prosody
           XMPP_BOSH_URL_BASE: 'http://localhost:5280',
-          // TURN config is injected into the client-side config.js so browsers
-          // know to request relay candidates from this server. Port comes from
-          // the turn interface's SSL endpoint — the "preferred" external port
-          // in interfaces.ts is not guaranteed.
-          ...(turnEndpoint
-            ? {
-                TURN_ENABLE: '1',
-                TURN_HOST: turnEndpoint.host,
-                TURN_PORT: String(turnEndpoint.port),
-                TURN_TRANSPORT: 'tcp',
-              }
-            : {}),
         },
       },
       ready: {
@@ -204,7 +208,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       requires: ['nginx-patch', 'prosody'],
     })
     .addDaemon('jicofo', {
-      subcontainer: await sdk.SubContainer.of(
+      subcontainer: sdk.SubContainer.of(
         effects,
         { imageId: 'jicofo' },
         jicofoMounts,
@@ -236,7 +240,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       requires: ['prosody'],
     })
     .addDaemon('jvb', {
-      subcontainer: await sdk.SubContainer.of(
+      subcontainer: sdk.SubContainer.of(
         effects,
         { imageId: 'jvb' },
         jvbMounts,

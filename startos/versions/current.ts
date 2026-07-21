@@ -1,38 +1,28 @@
 import { VersionInfo, IMPOSSIBLE } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '2.0.11031:0',
+  version: '2.0.11031:4',
   releaseNotes: {
-    en_US: `Updated Jitsi Meet to stable-11031 and Coturn to 4.12.0.
+    en_US: `TURN/STUN relay is now provided by the separate Coturn package instead of a bundled server.
 
-- Jitsi Meet → stable-11031: upgraded whiteboard; "mid" RTP header extension now disabled by default.
-- Coturn → 4.12.0: higher-throughput UDP relay paths and a new multiplex-peer mode.
+- Jitsi now depends on the Coturn package. Install it and give it a public domain to enable TURN for participants behind restrictive NAT or firewalls — Jitsi picks up its address and shared secret automatically.
+- No change to meetings, the web UI, or admin accounts.`,
+    es_ES: `La retransmisión TURN/STUN ahora la proporciona el paquete Coturn independiente en lugar de un servidor integrado.
 
-Full changelog: https://github.com/jitsi/docker-jitsi-meet/compare/stable-10978...stable-11031`,
-    es_ES: `Actualiza Jitsi Meet a stable-11031 y Coturn a 4.12.0.
+- Jitsi ahora depende del paquete Coturn. Instálalo y asígnale un dominio público para habilitar TURN para participantes detrás de NAT o cortafuegos restrictivos: Jitsi obtiene su dirección y secreto compartido automáticamente.
+- Sin cambios en las reuniones, la interfaz web ni las cuentas de administrador.`,
+    de_DE: `Das TURN/STUN-Relay wird jetzt vom separaten Coturn-Paket bereitgestellt statt von einem gebündelten Server.
 
-- Jitsi Meet → stable-11031: pizarra actualizada; la extensión de cabecera RTP "mid" ahora está desactivada por defecto.
-- Coturn → 4.12.0: rutas de retransmisión UDP de mayor rendimiento y un nuevo modo multiplex-peer.
+- Jitsi hängt jetzt vom Coturn-Paket ab. Installieren Sie es und geben Sie ihm eine öffentliche Domain, um TURN für Teilnehmer hinter restriktiven NATs oder Firewalls zu aktivieren — Jitsi übernimmt Adresse und gemeinsames Geheimnis automatisch.
+- Keine Änderung an Meetings, der Weboberfläche oder Administratorkonten.`,
+    pl_PL: `Przekaźnik TURN/STUN jest teraz dostarczany przez osobny pakiet Coturn zamiast wbudowanego serwera.
 
-Registro de cambios completo: https://github.com/jitsi/docker-jitsi-meet/compare/stable-10978...stable-11031`,
-    de_DE: `Aktualisiert Jitsi Meet auf stable-11031 und Coturn auf 4.12.0.
+- Jitsi zależy teraz od pakietu Coturn. Zainstaluj go i nadaj mu domenę publiczną, aby włączyć TURN dla uczestników za restrykcyjnymi NAT lub zaporami — Jitsi automatycznie pobiera jego adres i wspólny sekret.
+- Bez zmian w spotkaniach, interfejsie webowym ani kontach administratora.`,
+    fr_FR: `Le relais TURN/STUN est désormais fourni par le paquet Coturn séparé au lieu d'un serveur intégré.
 
-- Jitsi Meet → stable-11031: Whiteboard aktualisiert; die RTP-Header-Erweiterung "mid" ist jetzt standardmäßig deaktiviert.
-- Coturn → 4.12.0: durchsatzstärkere UDP-Relay-Pfade und ein neuer multiplex-peer-Modus.
-
-Vollständiges Änderungsprotokoll: https://github.com/jitsi/docker-jitsi-meet/compare/stable-10978...stable-11031`,
-    pl_PL: `Aktualizuje Jitsi Meet do stable-11031 i Coturn do 4.12.0.
-
-- Jitsi Meet → stable-11031: zaktualizowana tablica; rozszerzenie nagłówka RTP "mid" jest teraz domyślnie wyłączone.
-- Coturn → 4.12.0: wydajniejsze ścieżki przekazywania UDP i nowy tryb multiplex-peer.
-
-Pełny dziennik zmian: https://github.com/jitsi/docker-jitsi-meet/compare/stable-10978...stable-11031`,
-    fr_FR: `Met à jour Jitsi Meet vers stable-11031 et Coturn vers 4.12.0.
-
-- Jitsi Meet → stable-11031 : tableau blanc mis à jour ; l'extension d'en-tête RTP « mid » est désormais désactivée par défaut.
-- Coturn → 4.12.0 : chemins de relais UDP à plus haut débit et nouveau mode multiplex-peer.
-
-Journal des modifications complet : https://github.com/jitsi/docker-jitsi-meet/compare/stable-10978...stable-11031`,
+- Jitsi dépend maintenant du paquet Coturn. Installez-le et donnez-lui un domaine public pour activer TURN pour les participants derrière des NAT ou pare-feux restrictifs — Jitsi récupère automatiquement son adresse et son secret partagé.
+- Aucun changement pour les réunions, l'interface web ou les comptes administrateur.`,
   },
   migrations: {
     up: async ({ effects }) => {},
