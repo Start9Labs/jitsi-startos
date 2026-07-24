@@ -1,7 +1,7 @@
 import { VersionInfo, IMPOSSIBLE } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '2.0.11031:4',
+  version: '2.0.11031:5',
   releaseNotes: {
     en_US: `TURN/STUN relay is now provided by the separate Coturn package instead of a bundled server.
 
