@@ -17,6 +17,8 @@ import {
   prosodyEnv,
   prosodyMounts,
   prosodyPort,
+  prosodyStorageMountpoint,
+  prosodyUser,
   uiHostId,
   uiInterfaceId,
   uiPort,
@@ -135,27 +137,44 @@ export const main = sdk.setupMain(async ({ effects }) => {
     'web-sub',
   )
 
+  const prosodySub = sdk.SubContainer.of(
+    effects,
+    { imageId: 'prosody' },
+    prosodyMounts,
+    'prosody-sub',
+  )
+
   return sdk.Daemons.of(effects)
     .addOneshot('nginx-patch', {
       subcontainer: webSub,
       // Write custom nginx config before web daemon starts.
       // Increases BOSH proxy timeout to prevent client disconnections.
+      // Runs as root because the volume is root-owned and web reads it as `s6`.
       exec: {
         command: [
           'sh',
           '-c',
           'mkdir -p /config/nginx && echo "proxy_read_timeout 3600;" > /config/nginx/custom-meet.conf',
         ],
+        user: 'root',
+      },
+      requires: [],
+    })
+    .addOneshot('prosody-chown', {
+      subcontainer: prosodySub,
+      exec: {
+        command: [
+          'chown',
+          '-R',
+          `${prosodyUser}:${prosodyUser}`,
+          prosodyStorageMountpoint,
+        ],
+        user: 'root',
       },
       requires: [],
     })
     .addDaemon('prosody', {
-      subcontainer: sdk.SubContainer.of(
-        effects,
-        { imageId: 'prosody' },
-        prosodyMounts,
-        'prosody-sub',
-      ),
+      subcontainer: prosodySub,
       exec: {
         command: sdk.useEntrypoint(),
         runAsInit: true,
@@ -174,7 +193,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
             errorMessage: i18n('The XMPP server is not ready'),
           }),
       },
-      requires: [],
+      requires: ['prosody-chown'],
     })
     .addDaemon('web', {
       subcontainer: webSub,

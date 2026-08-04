@@ -1,7 +1,15 @@
 import { storeJson } from '../fileModels/store.json'
 import { i18n } from '../i18n'
 import { sdk } from '../sdk'
-import { getPassword, prosodyMounts, xmppConfig } from '../utils'
+import {
+  getPassword,
+  prosodyMounts,
+  prosodyStorageMountpoint,
+  prosodyUser,
+  xmppConfig,
+} from '../utils'
+
+const cfgDir = '/tmp/prosody-config'
 
 export const resetPassword = sdk.Action.withoutInput(
   'reset-password',
@@ -32,24 +40,37 @@ export const resetPassword = sdk.Action.withoutInput(
       prosodyMounts,
       'reset-password',
       async (subc) => {
-        // Delete existing user (ignore error if doesn't exist)
-        await subc.exec([
-          'prosodyctl',
-          '--config',
-          '/config/prosody.cfg.lua',
-          'deluser',
-          `admin@${xmppConfig.XMPP_DOMAIN}`,
-        ])
-        // Register with new password
-        await subc.execFail([
-          'prosodyctl',
-          '--config',
-          '/config/prosody.cfg.lua',
-          'register',
-          'admin',
-          xmppConfig.XMPP_DOMAIN,
-          password,
-        ])
+        await subc.execFail(
+          [
+            'chown',
+            '-R',
+            `${prosodyUser}:${prosodyUser}`,
+            prosodyStorageMountpoint,
+          ],
+          { user: 'root' },
+        )
+        // The running container generates its config into a tmpfs, so render a
+        // throwaway copy from the same templates to register against the
+        // accounts on the storage volume. `register` overwrites an existing user.
+        await subc.execFail(
+          [
+            'sh',
+            '-c',
+            `mkdir -p ${cfgDir}/conf.d ${cfgDir}/certs && ` +
+              `tpl /defaults/prosody.cfg.lua > ${cfgDir}/prosody.cfg.lua && ` +
+              `tpl /defaults/conf.d/jitsi-meet.cfg.lua > ${cfgDir}/conf.d/jitsi-meet.cfg.lua && ` +
+              `prosodyctl --config ${cfgDir}/prosody.cfg.lua register admin ${xmppConfig.XMPP_DOMAIN} "$ADMIN_PASSWORD"`,
+          ],
+          {
+            env: {
+              ...xmppConfig,
+              ENABLE_AUTH: '1',
+              ENABLE_GUESTS: '1',
+              AUTH_TYPE: 'internal',
+              ADMIN_PASSWORD: password,
+            },
+          },
+        )
       },
     )
 

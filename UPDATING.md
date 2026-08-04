@@ -4,7 +4,7 @@ Jitsi Meet ships as four coordinated upstream images, all pinned by `dockerTag` 
 
 ## Determining the upstream version
 
-- **Jitsi** — the four coordinated images (`jitsi/web`, `jitsi/prosody`, `jitsi/jicofo`, `jitsi/jvb`) are built and tagged together by [`jitsi/docker-jitsi-meet`](https://github.com/jitsi/docker-jitsi-meet). Each release is a `stable-<build>` tag (e.g. `stable-11031`) that all four images share. The current pin lives in `startos/manifest/index.ts` on the `web`, `prosody`, `jicofo`, and `jvb` image entries.
+- **Jitsi** — the four coordinated images (`ghcr.io/jitsi/web`, `ghcr.io/jitsi/prosody`, `ghcr.io/jitsi/jicofo`, `ghcr.io/jitsi/jvb`) are built and tagged together by [`jitsi/docker-jitsi-meet`](https://github.com/jitsi/docker-jitsi-meet). Each release is a `stable-<build>` tag (e.g. `stable-11146`) that all four images share. The current pin lives in `startos/manifest/index.ts` on the `web`, `prosody`, `jicofo`, and `jvb` image entries.
 
   ```bash
   gh release view -R jitsi/docker-jitsi-meet --json tagName -q .tagName
@@ -12,13 +12,26 @@ Jitsi Meet ships as four coordinated upstream images, all pinned by `dockerTag` 
   gh release list -R jitsi/docker-jitsi-meet
   ```
 
+  Upstream publishes to **GHCR**. It moved there during `stable-11146`; Docker Hub (`docker.io/jitsi/*`) stopped receiving `stable-*` tags at `stable-11031`, so pin `ghcr.io/jitsi/*`. GHCR's paginated tag list does not surface `stable-*` tags, so confirm a tag by fetching its manifest directly rather than listing:
+
+  ```bash
+  TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:jitsi/web:pull&service=ghcr.io" | jq -r .token)
+  curl -s -H "Authorization: Bearer $TOKEN" \
+    -H "Accept: application/vnd.oci.image.index.v1+json" \
+    "https://ghcr.io/v2/jitsi/web/manifests/stable-<build>" | jq '.manifests[].platform'
+  ```
+
+  Repeat for all four images — a release is only usable if every one of them resolves for both `amd64` and `arm64`.
+
 ## Applying the bump
 
-Find the latest `stable-<build>` tag published by [docker-jitsi-meet](https://github.com/jitsi/docker-jitsi-meet) (e.g. `stable-11031`). All four Jitsi images share that build number and must be bumped together:
+Find the latest `stable-<build>` tag published by [docker-jitsi-meet](https://github.com/jitsi/docker-jitsi-meet) (e.g. `stable-11146`). All four Jitsi images share that build number and must be bumped together:
 
-- `jitsi/web:stable-<build>`
-- `jitsi/prosody:stable-<build>`
-- `jitsi/jicofo:stable-<build>`
-- `jitsi/jvb:stable-<build>`
+- `ghcr.io/jitsi/web:stable-<build>`
+- `ghcr.io/jitsi/prosody:stable-<build>`
+- `ghcr.io/jitsi/jicofo:stable-<build>`
+- `ghcr.io/jitsi/jvb:stable-<build>`
+
+Read the upstream release notes for changes to the container contract, not just to Jitsi itself — the images are unprivileged (uid 1000) with a read-only root filesystem, and each treats `/config` as a read-only seed. A release that adds a directory the containers must write to needs a matching mount plus a `chown` oneshot in `startos/main.ts`, and a port change in `web/rootfs/defaults/default` needs `uiPort` in `startos/utils.ts` updated to match.
 
 If the Coturn dependency's minimum version needs to change, update `coturnVersionRange` in `startos/utils.ts`.

@@ -36,14 +36,16 @@
 
 This package runs four containers that together provide the Jitsi Meet platform:
 
-| Container | Image           | Architectures   | Purpose                            |
-| --------- | --------------- | --------------- | ---------------------------------- |
-| Prosody   | `jitsi/prosody` | x86_64, aarch64 | XMPP signaling server              |
-| Web       | `jitsi/web`     | x86_64, aarch64 | Nginx web frontend                 |
-| Jicofo    | `jitsi/jicofo`  | x86_64, aarch64 | Conference focus / room management |
-| JVB       | `jitsi/jvb`     | x86_64, aarch64 | Video bridge / media routing       |
+| Container | Image                   | Architectures   | Purpose                            |
+| --------- | ----------------------- | --------------- | ---------------------------------- |
+| Prosody   | `ghcr.io/jitsi/prosody` | x86_64, aarch64 | XMPP signaling server              |
+| Web       | `ghcr.io/jitsi/web`     | x86_64, aarch64 | Nginx web frontend                 |
+| Jicofo    | `ghcr.io/jitsi/jicofo`  | x86_64, aarch64 | Conference focus / room management |
+| JVB       | `ghcr.io/jitsi/jvb`     | x86_64, aarch64 | Video bridge / media routing       |
 
 TURN relay is provided by the separate [Coturn](https://github.com/Start9Labs/coturn-startos) package, which Jitsi depends on. All containers communicate over localhost (shared network namespace). All images are upstream unmodified.
+
+All four containers run as the unprivileged `s6` user (uid 1000) on a read-only root filesystem. Each treats `/config` as a read-only seed, copying it into a tmpfs under `/run` and generating its runtime configuration there, so `/config` is never written to at runtime.
 
 ---
 
@@ -55,12 +57,15 @@ TURN relay is provided by the separate [Coturn](https://github.com/Start9Labs/co
 
 Subdirectories within `main`:
 
-| Subpath    | Container Mount | Purpose                                  |
-| ---------- | --------------- | ---------------------------------------- |
-| `prosody/` | `/config`       | Prosody XMPP configuration and user data |
-| `web/`     | `/config`       | Nginx web frontend configuration         |
-| `jicofo/`  | `/config`       | Conference focus configuration           |
-| `jvb/`     | `/config`       | Video bridge configuration               |
+| Subpath            | Container Mount    | Purpose                                              |
+| ------------------ | ------------------ | ---------------------------------------------------- |
+| `prosody/`         | `/config`          | Prosody seed configuration                           |
+| `prosody-storage/` | `/var/lib/prosody` | Prosody XMPP accounts (`data_path`), chowned to `s6` |
+| `web/`             | `/config`          | Nginx web frontend configuration                     |
+| `jicofo/`          | `/config`          | Conference focus configuration                       |
+| `jvb/`             | `/config`          | Video bridge configuration                           |
+
+Prosody stores XMPP accounts under `data_path` (`/var/lib/prosody`), which it requires to be writable by uid 1000 and aborts at startup otherwise — the `prosody-chown` oneshot fixes ownership before the daemon starts. Accounts created under an earlier release in `prosody/data` are copied across automatically by the upstream entrypoint on first start.
 
 **StartOS-specific files:**
 
@@ -110,7 +115,7 @@ Meeting-level settings are configured through the web interface during a meeting
 
 | Interface          | Port  | Protocol | Purpose                                    |
 | ------------------ | ----- | -------- | ------------------------------------------ |
-| Web UI             | 80    | HTTP     | Jitsi Meet web interface                   |
+| Web UI             | 8000  | HTTP     | Jitsi Meet web interface                   |
 | Video Bridge Media | 10000 | UDP      | WebRTC media transport for video and audio |
 
 **Access methods:**
@@ -172,7 +177,7 @@ Jitsi reads Coturn's public `turn`/`turns` endpoint from its exported `turn` int
 | Check   | Display Name     | Method                                   | Grace Period |
 | ------- | ---------------- | ---------------------------------------- | ------------ |
 | Prosody | XMPP Server      | Port 5280 listening                      | 30 seconds   |
-| Web     | Web Interface    | Port 80 listening                        | —            |
+| Web     | Web Interface    | Port 8000 listening                      | —            |
 | Jicofo  | Conference Focus | HTTP check `localhost:8888/about/health` | —            |
 | JVB     | Video Bridge     | Port 8080 listening + public IP check    | —            |
 
@@ -219,15 +224,15 @@ Build and development workflow follow the StartOS packaging guide: <https://docs
 ```yaml
 package_id: jitsi
 images:
-  web: jitsi/web
-  prosody: jitsi/prosody
-  jicofo: jitsi/jicofo
-  jvb: jitsi/jvb
+  web: ghcr.io/jitsi/web
+  prosody: ghcr.io/jitsi/prosody
+  jicofo: ghcr.io/jitsi/jicofo
+  jvb: ghcr.io/jitsi/jvb
 architectures: [x86_64, aarch64]
 volumes:
-  main: prosody/, web/, jicofo/, jvb/, store.json
+  main: prosody/, prosody-storage/, web/, jicofo/, jvb/, store.json
 ports:
-  ui: 80
+  ui: 8000
   jvb_media: 10000/udp
 dependencies:
   coturn: { required: true, kind: running, versionRange: ">=4.14.0:0" }
@@ -272,7 +277,7 @@ startos_managed_env_vars:
 actions:
   - reset-password (enabled, any)
 health_checks:
-  - port_listening: [5280, 80, 8080]
+  - port_listening: [5280, 8000, 8080]
   - http_check: 8888 (/about/health)
 backup_volumes:
   - main
