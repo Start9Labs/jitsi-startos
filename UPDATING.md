@@ -32,6 +32,8 @@ Find the latest `stable-<build>` tag published by [docker-jitsi-meet](https://gi
 - `ghcr.io/jitsi/jicofo:stable-<build>`
 - `ghcr.io/jitsi/jvb:stable-<build>`
 
-Read the upstream release notes for changes to the container contract, not just to Jitsi itself — the images are unprivileged (uid 1000) with a read-only root filesystem, and each treats `/config` as a read-only seed. A release that adds a directory the containers must write to needs a matching mount plus a `chown` oneshot in `startos/main.ts`, and a port change in `web/rootfs/defaults/default` needs `uiPort` in `startos/utils.ts` updated to match.
+Read the upstream release notes for changes to the container contract, not just to Jitsi itself — the images run unprivileged (uid 1000) and each treats `/config` as a read-only seed. A release that adds a directory the containers must write to needs a matching mount plus a `chown` oneshot in `startos/main.ts`, and a port change in `web/rootfs/defaults/default` needs `uiPort` in `startos/utils.ts` updated to match.
+
+If a release changes which uid the containers run as, check the **upgrade** path, not just a fresh install: files an earlier release wrote are left owned by the old uid, and the entrypoints copy seed data with plain `cp` that fails silently on a permission error. Compare a populated volume against the new uid before shipping — `2.0.11146:0` needed `/config` added to `prosody-chown` for exactly this reason.
 
 If the Coturn dependency's minimum version needs to change, update `coturnVersionRange` in `startos/utils.ts`.

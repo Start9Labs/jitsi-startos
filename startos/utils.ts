@@ -41,8 +41,11 @@ export const xmppConfig = {
   XMPP_SERVER: 'localhost',
 }
 
+// Every image reads its seed configuration from /config.
+export const configMountpoint = '/config'
+
 // Prosody keeps XMPP accounts under `data_path` (/var/lib/prosody). Upstream
-// generates its config into a tmpfs and treats /config as a read-only seed, so
+// generates its config under /run and treats /config as a read-only seed, so
 // account data must live on its own volume subpath to survive a restart.
 export const prosodyStorageMountpoint = '/var/lib/prosody'
 
@@ -54,7 +57,7 @@ export const prosodyMounts = sdk.Mounts.of()
   .mountVolume({
     volumeId: 'main',
     subpath: 'prosody',
-    mountpoint: '/config',
+    mountpoint: configMountpoint,
     readonly: false,
   })
   .mountVolume({
@@ -67,21 +70,21 @@ export const prosodyMounts = sdk.Mounts.of()
 export const webMounts = sdk.Mounts.of().mountVolume({
   volumeId: 'main',
   subpath: 'web',
-  mountpoint: '/config',
+  mountpoint: configMountpoint,
   readonly: false,
 })
 
 export const jicofoMounts = sdk.Mounts.of().mountVolume({
   volumeId: 'main',
   subpath: 'jicofo',
-  mountpoint: '/config',
+  mountpoint: configMountpoint,
   readonly: false,
 })
 
 export const jvbMounts = sdk.Mounts.of().mountVolume({
   volumeId: 'main',
   subpath: 'jvb',
-  mountpoint: '/config',
+  mountpoint: configMountpoint,
   readonly: false,
 })
 

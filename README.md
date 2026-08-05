@@ -45,7 +45,7 @@ This package runs four containers that together provide the Jitsi Meet platform:
 
 TURN relay is provided by the separate [Coturn](https://github.com/Start9Labs/coturn-startos) package, which Jitsi depends on. All containers communicate over localhost (shared network namespace). All images are upstream unmodified.
 
-All four containers run as the unprivileged `s6` user (uid 1000) on a read-only root filesystem. Each treats `/config` as a read-only seed, copying it into a tmpfs under `/run` and generating its runtime configuration there, so `/config` is never written to at runtime.
+All four containers run as the unprivileged `s6` user (uid 1000) and cannot write to their own root filesystem. Each treats `/config` as a read-only seed, copying it into `/run` and generating its runtime configuration there, so `/config` is never written to at runtime.
 
 ---
 
@@ -65,7 +65,7 @@ Subdirectories within `main`:
 | `jicofo/`          | `/config`          | Conference focus configuration                       |
 | `jvb/`             | `/config`          | Video bridge configuration                           |
 
-Prosody stores XMPP accounts under `data_path` (`/var/lib/prosody`), which it requires to be writable by uid 1000 and aborts at startup otherwise — the `prosody-chown` oneshot fixes ownership before the daemon starts. Accounts created under an earlier release in `prosody/data` are copied across automatically by the upstream entrypoint on first start.
+Prosody stores XMPP accounts under `data_path` (`/var/lib/prosody`), which it requires to be writable by uid 1000 and aborts at startup otherwise — the `prosody-chown` oneshot fixes ownership before the daemon starts. It chowns the `prosody/` seed too: releases before `2.0.11146:0` ran prosody as root, leaving `prosody/data` at mode 0750 owned by uid 100 and `prosody/certs/*.key` at mode 0400, neither readable by uid 1000. Once ownership is fixed, the upstream entrypoint copies accounts created under an earlier release from `prosody/data` into the new subpath on first start, and the existing self-signed certificates carry over intact.
 
 **StartOS-specific files:**
 

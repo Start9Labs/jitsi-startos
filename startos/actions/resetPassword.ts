@@ -49,7 +49,7 @@ export const resetPassword = sdk.Action.withoutInput(
           ],
           { user: 'root' },
         )
-        // The running container generates its config into a tmpfs, so render a
+        // The running container generates its config under /run, so render a
         // throwaway copy from the same templates to register against the
         // accounts on the storage volume. `register` overwrites an existing user.
         await subc.execFail(
