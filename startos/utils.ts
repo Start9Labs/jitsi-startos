@@ -1,7 +1,7 @@
 import { utils } from '@start9labs/start-sdk'
 import { sdk } from './sdk'
 
-export const uiPort = 80
+export const uiPort = 8000
 export const jvbMediaPort = 10000
 export const jvbHttpPort = 8080
 export const jicofoHealthPort = 8888
@@ -41,31 +41,50 @@ export const xmppConfig = {
   XMPP_SERVER: 'localhost',
 }
 
-export const prosodyMounts = sdk.Mounts.of().mountVolume({
-  volumeId: 'main',
-  subpath: 'prosody',
-  mountpoint: '/config',
-  readonly: false,
-})
+// Every image reads its seed configuration from /config.
+export const configMountpoint = '/config'
+
+// Prosody keeps XMPP accounts under `data_path` (/var/lib/prosody). Upstream
+// generates its config under /run and treats /config as a read-only seed, so
+// account data must live on its own volume subpath to survive a restart.
+export const prosodyStorageMountpoint = '/var/lib/prosody'
+
+// The image runs as `s6` (uid 1000); StartOS mounts volumes root-owned, and
+// prosody aborts at startup if this directory is not writable.
+export const prosodyUser = 's6'
+
+export const prosodyMounts = sdk.Mounts.of()
+  .mountVolume({
+    volumeId: 'main',
+    subpath: 'prosody',
+    mountpoint: configMountpoint,
+    readonly: false,
+  })
+  .mountVolume({
+    volumeId: 'main',
+    subpath: 'prosody-storage',
+    mountpoint: prosodyStorageMountpoint,
+    readonly: false,
+  })
 
 export const webMounts = sdk.Mounts.of().mountVolume({
   volumeId: 'main',
   subpath: 'web',
-  mountpoint: '/config',
+  mountpoint: configMountpoint,
   readonly: false,
 })
 
 export const jicofoMounts = sdk.Mounts.of().mountVolume({
   volumeId: 'main',
   subpath: 'jicofo',
-  mountpoint: '/config',
+  mountpoint: configMountpoint,
   readonly: false,
 })
 
 export const jvbMounts = sdk.Mounts.of().mountVolume({
   volumeId: 'main',
   subpath: 'jvb',
-  mountpoint: '/config',
+  mountpoint: configMountpoint,
   readonly: false,
 })
 

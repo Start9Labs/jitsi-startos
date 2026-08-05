@@ -13,19 +13,19 @@ export const manifest = setupManifest({
   volumes: ['main'],
   images: {
     web: {
-      source: { dockerTag: 'jitsi/web:stable-11031' },
+      source: { dockerTag: 'ghcr.io/jitsi/web:stable-11146' },
       arch: ['x86_64', 'aarch64'],
     },
     prosody: {
-      source: { dockerTag: 'jitsi/prosody:stable-11031' },
+      source: { dockerTag: 'ghcr.io/jitsi/prosody:stable-11146' },
       arch: ['x86_64', 'aarch64'],
     },
     jicofo: {
-      source: { dockerTag: 'jitsi/jicofo:stable-11031' },
+      source: { dockerTag: 'ghcr.io/jitsi/jicofo:stable-11146' },
       arch: ['x86_64', 'aarch64'],
     },
     jvb: {
-      source: { dockerTag: 'jitsi/jvb:stable-11031' },
+      source: { dockerTag: 'ghcr.io/jitsi/jvb:stable-11146' },
       arch: ['x86_64', 'aarch64'],
     },
   },

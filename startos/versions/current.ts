@@ -1,28 +1,33 @@
 import { VersionInfo, IMPOSSIBLE } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '2.0.11031:6',
+  version: '2.0.11146:0',
   releaseNotes: {
-    en_US: `TURN/STUN relay is now provided by the separate Coturn package instead of a bundled server.
+    en_US: `Updated Jitsi Meet to stable-11146.
 
-- Jitsi now depends on the Coturn package. Install it and give it a public domain to enable TURN for participants behind restrictive NAT or firewalls — Jitsi picks up its address and shared secret automatically.
-- No change to meetings, the web UI, or admin accounts.`,
-    es_ES: `La retransmisión TURN/STUN ahora la proporciona el paquete Coturn independiente en lugar de un servidor integrado.
+- Upstream now runs all containers as an unprivileged user instead of root, and XMPP accounts move to their own storage location. Your admin account carries over automatically on first start.
+- Adds live audio translation wiring and virtual background v2; drops deprecated colibri websocket support.
+- Full upstream release notes: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146`,
+    es_ES: `Actualiza Jitsi Meet a stable-11146.
 
-- Jitsi ahora depende del paquete Coturn. Instálalo y asígnale un dominio público para habilitar TURN para participantes detrás de NAT o cortafuegos restrictivos: Jitsi obtiene su dirección y secreto compartido automáticamente.
-- Sin cambios en las reuniones, la interfaz web ni las cuentas de administrador.`,
-    de_DE: `Das TURN/STUN-Relay wird jetzt vom separaten Coturn-Paket bereitgestellt statt von einem gebündelten Server.
+- Upstream ahora ejecuta todos los contenedores como usuario sin privilegios en lugar de root, y las cuentas XMPP se trasladan a su propia ubicación de almacenamiento. Tu cuenta de administrador se conserva automáticamente en el primer inicio.
+- Añade la traducción de audio en vivo y el fondo virtual v2; elimina la compatibilidad obsoleta con websocket colibri.
+- Notas completas: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146`,
+    de_DE: `Aktualisiert Jitsi Meet auf stable-11146.
 
-- Jitsi hängt jetzt vom Coturn-Paket ab. Installieren Sie es und geben Sie ihm eine öffentliche Domain, um TURN für Teilnehmer hinter restriktiven NATs oder Firewalls zu aktivieren — Jitsi übernimmt Adresse und gemeinsames Geheimnis automatisch.
-- Keine Änderung an Meetings, der Weboberfläche oder Administratorkonten.`,
-    pl_PL: `Przekaźnik TURN/STUN jest teraz dostarczany przez osobny pakiet Coturn zamiast wbudowanego serwera.
+- Upstream führt alle Container jetzt als unprivilegierter Benutzer statt als root aus, und XMPP-Konten wechseln an einen eigenen Speicherort. Ihr Administratorkonto wird beim ersten Start automatisch übernommen.
+- Ergänzt Live-Audioübersetzung und virtuellen Hintergrund v2; entfernt die veraltete Colibri-WebSocket-Unterstützung.
+- Vollständige Versionshinweise: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146`,
+    pl_PL: `Aktualizuje Jitsi Meet do stable-11146.
 
-- Jitsi zależy teraz od pakietu Coturn. Zainstaluj go i nadaj mu domenę publiczną, aby włączyć TURN dla uczestników za restrykcyjnymi NAT lub zaporami — Jitsi automatycznie pobiera jego adres i wspólny sekret.
-- Bez zmian w spotkaniach, interfejsie webowym ani kontach administratora.`,
-    fr_FR: `Le relais TURN/STUN est désormais fourni par le paquet Coturn séparé au lieu d'un serveur intégré.
+- Upstream uruchamia teraz wszystkie kontenery jako użytkownik bez uprawnień zamiast roota, a konta XMPP przenoszą się do własnej lokalizacji. Twoje konto administratora zostanie automatycznie przeniesione przy pierwszym uruchomieniu.
+- Dodaje tłumaczenie dźwięku na żywo i wirtualne tło v2; usuwa przestarzałą obsługę websocket colibri.
+- Pełne informacje o wydaniu: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146`,
+    fr_FR: `Met à jour Jitsi Meet vers stable-11146.
 
-- Jitsi dépend maintenant du paquet Coturn. Installez-le et donnez-lui un domaine public pour activer TURN pour les participants derrière des NAT ou pare-feux restrictifs — Jitsi récupère automatiquement son adresse et son secret partagé.
-- Aucun changement pour les réunions, l'interface web ou les comptes administrateur.`,
+- En amont, tous les conteneurs s'exécutent désormais en tant qu'utilisateur non privilégié plutôt que root et les comptes XMPP sont déplacés vers leur propre emplacement de stockage. Votre compte administrateur est conservé automatiquement au premier démarrage.
+- Ajoute la traduction audio en direct et l'arrière-plan virtuel v2 ; supprime la prise en charge obsolète du websocket colibri.
+- Notes de version complètes : https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146`,
   },
   migrations: {
     up: async ({ effects }) => {},

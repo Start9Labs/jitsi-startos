@@ -2,6 +2,7 @@ import { storeJson } from './fileModels/store.json'
 import { i18n } from './i18n'
 import { sdk } from './sdk'
 import {
+  configMountpoint,
   coturnHostId,
   coturnId,
   coturnMountpoint,
@@ -17,6 +18,8 @@ import {
   prosodyEnv,
   prosodyMounts,
   prosodyPort,
+  prosodyStorageMountpoint,
+  prosodyUser,
   uiHostId,
   uiInterfaceId,
   uiPort,
@@ -135,27 +138,51 @@ export const main = sdk.setupMain(async ({ effects }) => {
     'web-sub',
   )
 
+  const prosodySub = sdk.SubContainer.of(
+    effects,
+    { imageId: 'prosody' },
+    prosodyMounts,
+    'prosody-sub',
+  )
+
   return sdk.Daemons.of(effects)
     .addOneshot('nginx-patch', {
       subcontainer: webSub,
       // Write custom nginx config before web daemon starts.
       // Increases BOSH proxy timeout to prevent client disconnections.
+      // Runs as root because the volume is root-owned and web reads it as `s6`.
       exec: {
         command: [
           'sh',
           '-c',
           'mkdir -p /config/nginx && echo "proxy_read_timeout 3600;" > /config/nginx/custom-meet.conf',
         ],
+        user: 'root',
+      },
+      requires: [],
+    })
+    .addOneshot('prosody-chown', {
+      subcontainer: prosodySub,
+      // /config is included because releases before 2.0.11146 ran prosody as
+      // root, leaving the seed owned by uid 100 with mode 0750 on data/ and
+      // 0400 on the certs. uid 1000 can read neither, so upstream's
+      // /config/data -> /var/lib/prosody account migration and its cert copy
+      // both fail silently, and the missing key is not regenerated because the
+      // matching .crt did copy across.
+      exec: {
+        command: [
+          'chown',
+          '-R',
+          `${prosodyUser}:${prosodyUser}`,
+          configMountpoint,
+          prosodyStorageMountpoint,
+        ],
+        user: 'root',
       },
       requires: [],
     })
     .addDaemon('prosody', {
-      subcontainer: sdk.SubContainer.of(
-        effects,
-        { imageId: 'prosody' },
-        prosodyMounts,
-        'prosody-sub',
-      ),
+      subcontainer: prosodySub,
       exec: {
         command: sdk.useEntrypoint(),
         runAsInit: true,
@@ -174,7 +201,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
             errorMessage: i18n('The XMPP server is not ready'),
           }),
       },
-      requires: [],
+      requires: ['prosody-chown'],
     })
     .addDaemon('web', {
       subcontainer: webSub,

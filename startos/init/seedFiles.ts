@@ -1,47 +1,13 @@
 import { storeJson } from '../fileModels/store.json'
-import { i18n } from '../i18n'
 import { sdk } from '../sdk'
-import { getPassword, prosodyEnv, prosodyMounts, prosodyPort } from '../utils'
+import { getPassword } from '../utils'
 
-export const seedFiles = sdk.setupOnInit(async (effects, kind, progress) => {
+export const seedFiles = sdk.setupOnInit(async (effects, kind) => {
   if (kind === 'install') {
-    const JICOFO_AUTH_PASSWORD = getPassword()
-    const JVB_AUTH_PASSWORD = getPassword()
-
     await storeJson.merge(effects, {
-      JICOFO_AUTH_PASSWORD,
-      JVB_AUTH_PASSWORD,
+      JICOFO_AUTH_PASSWORD: getPassword(),
+      JVB_AUTH_PASSWORD: getPassword(),
     })
-
-    // Start prosody briefly so its entrypoint generates config files.
-    // The resetPassword action needs /config/prosody.cfg.lua to exist.
-    const phase = progress.addPhase(i18n('Generating XMPP configuration'))
-    phase.start()
-    await sdk.Daemons.of(effects)
-      .addDaemon('prosody', {
-        subcontainer: sdk.SubContainer.of(
-          effects,
-          { imageId: 'prosody' },
-          prosodyMounts,
-          'prosody-seed',
-        ),
-        exec: {
-          command: sdk.useEntrypoint(),
-          runAsInit: true,
-          env: prosodyEnv({ JICOFO_AUTH_PASSWORD, JVB_AUTH_PASSWORD }),
-        },
-        ready: {
-          display: null,
-          fn: () =>
-            sdk.healthCheck.checkPortListening(effects, prosodyPort, {
-              successMessage: '',
-              errorMessage: '',
-            }),
-        },
-        requires: [],
-      })
-      .runUntilSuccess(300_000)
-    phase.complete()
   } else {
     await storeJson.merge(effects, {})
   }
