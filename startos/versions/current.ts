@@ -1,33 +1,28 @@
 import { VersionInfo, IMPOSSIBLE } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '2.0.11146:0',
+  version: '2.0.11146:1',
   releaseNotes: {
-    en_US: `Updated Jitsi Meet to stable-11146.
+    en_US: `Updated the Jitsi Meet container images to stable-11146-1.
 
-- Upstream now runs all containers as an unprivileged user instead of root, and XMPP accounts move to their own storage location. Your admin account carries over automatically on first start.
-- Adds live audio translation wiring and virtual background v2; drops deprecated colibri websocket support.
-- Full upstream release notes: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146`,
-    es_ES: `Actualiza Jitsi Meet a stable-11146.
+- A maintenance rebuild: Jitsi Meet itself stays at 2.0.11146, and the fixes in this upstream release apply to components this package does not ship. The rebuilt images pick up current base-system packages.
+- Full upstream release notes: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146-1`,
+    es_ES: `Actualiza las imágenes de contenedor de Jitsi Meet a stable-11146-1.
 
-- Upstream ahora ejecuta todos los contenedores como usuario sin privilegios en lugar de root, y las cuentas XMPP se trasladan a su propia ubicación de almacenamiento. Tu cuenta de administrador se conserva automáticamente en el primer inicio.
-- Añade la traducción de audio en vivo y el fondo virtual v2; elimina la compatibilidad obsoleta con websocket colibri.
-- Notas completas: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146`,
-    de_DE: `Aktualisiert Jitsi Meet auf stable-11146.
+- Es una reconstrucción de mantenimiento: Jitsi Meet sigue en 2.0.11146 y las correcciones de esta versión afectan a componentes que este paquete no incluye. Las imágenes reconstruidas incorporan los paquetes actuales del sistema base.
+- Notas completas: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146-1`,
+    de_DE: `Aktualisiert die Jitsi-Meet-Container-Images auf stable-11146-1.
 
-- Upstream führt alle Container jetzt als unprivilegierter Benutzer statt als root aus, und XMPP-Konten wechseln an einen eigenen Speicherort. Ihr Administratorkonto wird beim ersten Start automatisch übernommen.
-- Ergänzt Live-Audioübersetzung und virtuellen Hintergrund v2; entfernt die veraltete Colibri-WebSocket-Unterstützung.
-- Vollständige Versionshinweise: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146`,
-    pl_PL: `Aktualizuje Jitsi Meet do stable-11146.
+- Ein Wartungs-Rebuild: Jitsi Meet selbst bleibt bei 2.0.11146, und die Korrekturen dieser Version betreffen Komponenten, die dieses Paket nicht ausliefert. Die neu gebauten Images übernehmen aktuelle Basissystem-Pakete.
+- Vollständige Versionshinweise: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146-1`,
+    pl_PL: `Aktualizuje obrazy kontenerów Jitsi Meet do stable-11146-1.
 
-- Upstream uruchamia teraz wszystkie kontenery jako użytkownik bez uprawnień zamiast roota, a konta XMPP przenoszą się do własnej lokalizacji. Twoje konto administratora zostanie automatycznie przeniesione przy pierwszym uruchomieniu.
-- Dodaje tłumaczenie dźwięku na żywo i wirtualne tło v2; usuwa przestarzałą obsługę websocket colibri.
-- Pełne informacje o wydaniu: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146`,
-    fr_FR: `Met à jour Jitsi Meet vers stable-11146.
+- To przebudowa konserwacyjna: samo Jitsi Meet pozostaje w wersji 2.0.11146, a poprawki z tego wydania dotyczą komponentów, których ten pakiet nie zawiera. Przebudowane obrazy zawierają aktualne pakiety systemu bazowego.
+- Pełne informacje o wydaniu: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146-1`,
+    fr_FR: `Met à jour les images de conteneur Jitsi Meet vers stable-11146-1.
 
-- En amont, tous les conteneurs s'exécutent désormais en tant qu'utilisateur non privilégié plutôt que root et les comptes XMPP sont déplacés vers leur propre emplacement de stockage. Votre compte administrateur est conservé automatiquement au premier démarrage.
-- Ajoute la traduction audio en direct et l'arrière-plan virtuel v2 ; supprime la prise en charge obsolète du websocket colibri.
-- Notes de version complètes : https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146`,
+- Il s'agit d'une reconstruction de maintenance : Jitsi Meet reste en 2.0.11146 et les correctifs de cette version amont concernent des composants que ce paquet ne fournit pas. Les images reconstruites intègrent les paquets actuels du système de base.
+- Notes de version complètes : https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146-1`,
   },
   migrations: {
     up: async ({ effects }) => {},
