@@ -4,13 +4,15 @@
 
 # Jitsi Meet on StartOS
 
-> **Upstream docs:** <https://jitsi.github.io/handbook/>
->
 > Everything not listed in this document should behave the same as upstream
 > Jitsi Meet. If a feature, setting, or behavior is not mentioned here, the
-> upstream documentation is accurate and fully applicable.
+> upstream documentation is accurate and fully applicable — see the
+> Documentation section of `instructions.md` for links.
 
-[Jitsi Meet](https://github.com/jitsi/docker-jitsi-meet) is a free, open-source video conferencing platform that requires no account. Create or join meetings directly from your browser.
+[Jitsi Meet](https://github.com/jitsi/docker-jitsi-meet) is a video-conferencing platform. This package runs upstream's four-container deployment, generates the internal credentials those components authenticate to each other with, and requires an admin password so only you can start a meeting.
+
+- **Upstream repo:** <https://github.com/jitsi/docker-jitsi-meet>
+- **Wrapper repo:** <https://github.com/Start9Labs/jitsi-startos>
 
 ---
 
@@ -18,204 +20,169 @@
 
 - [Image and Container Runtime](#image-and-container-runtime)
 - [Volume and Data Layout](#volume-and-data-layout)
-- [Installation and First-Run Flow](#installation-and-first-run-flow)
-- [Configuration Management](#configuration-management)
-- [Network Access and Interfaces](#network-access-and-interfaces)
-- [Actions (StartOS UI)](#actions-startos-ui)
+- [File Models](#file-models)
 - [Dependencies](#dependencies)
-- [Backups and Restore](#backups-and-restore)
+- [Network Access and Interfaces](#network-access-and-interfaces)
+- [Installation and First-Run Flow](#installation-and-first-run-flow)
+- [Actions](#actions)
+- [Tasks](#tasks)
 - [Health Checks](#health-checks)
+- [Backups and Restore](#backups-and-restore)
 - [Limitations and Differences](#limitations-and-differences)
-- [What Is Unchanged from Upstream](#what-is-unchanged-from-upstream)
-- [Contributing](#contributing)
 - [Quick Reference for AI Consumers](#quick-reference-for-ai-consumers)
 
 ---
 
 ## Image and Container Runtime
 
-This package runs four containers that together provide the Jitsi Meet platform:
+Four upstream images, unmodified, each run as its container's init process.
 
-| Container | Image                   | Architectures   | Purpose                            |
-| --------- | ----------------------- | --------------- | ---------------------------------- |
-| Prosody   | `ghcr.io/jitsi/prosody` | x86_64, aarch64 | XMPP signaling server              |
-| Web       | `ghcr.io/jitsi/web`     | x86_64, aarch64 | Nginx web frontend                 |
-| Jicofo    | `ghcr.io/jitsi/jicofo`  | x86_64, aarch64 | Conference focus / room management |
-| JVB       | `ghcr.io/jitsi/jvb`     | x86_64, aarch64 | Video bridge / media routing       |
+| Property      | Value                                                                                     |
+| ------------- | ----------------------------------------------------------------------------------------- |
+| Images        | `ghcr.io/jitsi/web`, `ghcr.io/jitsi/prosody`, `ghcr.io/jitsi/jicofo`, `ghcr.io/jitsi/jvb` |
+| Architectures | x86_64, aarch64                                                                           |
+| Entrypoint    | Each image's own, run as init                                                             |
 
-TURN relay is provided by the separate [Coturn](https://github.com/Start9Labs/coturn-startos) package, which Jitsi depends on. All containers communicate over localhost (shared network namespace). All images are upstream unmodified.
+| Subcontainer  | Purpose                                                                                      |
+| ------------- | -------------------------------------------------------------------------------------------- |
+| `web-sub`     | nginx and the Jitsi Meet client — the `web` daemon, and the one to `attach` to for UI issues |
+| `prosody-sub` | The XMPP server every other component authenticates against                                  |
+| `jicofo-sub`  | The conference focus, which allocates a bridge per meeting                                   |
+| `jvb-sub`     | The video bridge, which carries the actual media                                             |
 
-All four containers run as the unprivileged `s6` user (uid 1000) and cannot write to their own root filesystem. Each treats `/config` as a read-only seed, copying it into `/run` and generating its runtime configuration there, so `/config` is never written to at runtime.
-
----
+Startup is ordered: `prosody` first, then `web`, `jicofo`, and `jvb` alongside it. Two oneshots run before their daemons — `nginx-patch` writes a longer proxy timeout so long-lived BOSH connections are not cut, and `prosody-chown` hands the config and account directories to the unprivileged user the image runs as.
 
 ## Volume and Data Layout
 
-| Volume | Mount Point | Purpose                            |
-| ------ | ----------- | ---------------------------------- |
-| `main` | various     | Persistent data for all components |
+One volume, subdivided per component. Each image reads its seed configuration from `/config` and treats it as read-only.
 
-Subdirectories within `main`:
+| Volume | Mounted at                                                   | Purpose                                        |
+| ------ | ------------------------------------------------------------ | ---------------------------------------------- |
+| `main` | `prosody/` → `/config`, plus a subpath at `/var/lib/prosody` | XMPP accounts and prosody's seed configuration |
+| `main` | one subpath each → `/config` in `web`, `jicofo`, `jvb`       | Their seed configuration                       |
+| `main` | root                                                         | `store.json`                                   |
 
-| Subpath            | Container Mount    | Purpose                                              |
-| ------------------ | ------------------ | ---------------------------------------------------- |
-| `prosody/`         | `/config`          | Prosody seed configuration                           |
-| `prosody-storage/` | `/var/lib/prosody` | Prosody XMPP accounts (`data_path`), chowned to `s6` |
-| `web/`             | `/config`          | Nginx web frontend configuration                     |
-| `jicofo/`          | `/config`          | Conference focus configuration                       |
-| `jvb/`             | `/config`          | Video bridge configuration                           |
+Prosody's **accounts** live at `/var/lib/prosody`, on their own subpath, rather than under `/config`. Upstream generates prosody's live configuration under `/run` and treats `/config` as a seed, so account data placed there would not survive a restart.
 
-Prosody stores XMPP accounts under `data_path` (`/var/lib/prosody`), which it requires to be writable by uid 1000 and aborts at startup otherwise — the `prosody-chown` oneshot fixes ownership before the daemon starts. It chowns the `prosody/` seed too: releases before `2.0.11146:0` ran prosody as root, leaving `prosody/data` at mode 0750 owned by uid 100 and `prosody/certs/*.key` at mode 0400, neither readable by uid 1000. Once ownership is fixed, the upstream entrypoint copies accounts created under an earlier release from `prosody/data` into the new subpath on first start, and the existing self-signed certificates carry over intact.
+Coturn's shared secret is read through a **read-only mount of just the `shared` subpath** of Coturn's volume, into a throwaway container — never the volume root, and never into a running daemon.
 
-**StartOS-specific files:**
+## File Models
 
-- `store.json` — Internal passwords (admin, JICOFO auth, JVB auth)
+One model, holding three generated credentials.
 
----
+| File         | Format | Modelled                | Written by                                   |
+| ------------ | ------ | ----------------------- | -------------------------------------------- |
+| `store.json` | JSON   | Yes — `FileHelper.json` | Install, every init, and the password action |
 
-## Installation and First-Run Flow
+| Key                    | Set by     | Notes                                                    |
+| ---------------------- | ---------- | -------------------------------------------------------- |
+| `JICOFO_AUTH_PASSWORD` | Install    | Internal; how the conference focus authenticates to XMPP |
+| `JVB_AUTH_PASSWORD`    | Install    | Internal; how the video bridge authenticates to XMPP     |
+| `ADMIN_PASSWORD`       | The action | Yours; the credential for starting a meeting             |
 
-| Step          | Upstream                           | StartOS                                                |
-| ------------- | ---------------------------------- | ------------------------------------------------------ |
-| Installation  | Docker Compose setup with env vars | Install from marketplace                               |
-| XMPP/Auth     | Manual Prosody configuration       | Auto-configured internally                             |
-| Admin account | Set via environment variables      | Run "Create Admin Password" action                     |
-| TURN relay    | Separate Coturn deployment         | Install the Coturn package and give it a public domain |
+The two internal credentials are generated once and never shown — nothing asks for them and nothing displays them.
 
-**First-run steps:**
+**No configuration file reaches the applications.** Every component is configured by environment, composed on each start, and that is where this package's overrides live:
 
-1. Install Jitsi Meet from StartOS marketplace (StartOS will prompt to install the required Coturn package)
-2. Run "Create Admin Password" action to generate login credentials
-3. Access the web UI and create a meeting
-4. For clearnet access, configure a public IPv4 on the Video Bridge Media interface
-5. For NAT/firewall traversal, give the Coturn package a public domain — Jitsi picks up its address and shared secret automatically
-
----
-
-## Configuration Management
-
-### Auto-Configured by StartOS
-
-| Setting                                              | Purpose                                                                                   |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| XMPP domains (`meet.jitsi`, `auth.meet.jitsi`, etc.) | Internal XMPP routing                                                                     |
-| Authentication (internal auth + guest access)        | Meeting creation requires admin login; guests can join                                    |
-| JICOFO/JVB auth passwords                            | Internal component authentication                                                         |
-| Prosody `external_services` (STUN/TURN)              | Advertises the Coturn endpoint and mints REST-API credentials from Coturn's shared secret |
-| BOSH relative URL                                    | Ensures web client works from any origin                                                  |
-| Nginx proxy timeout                                  | Increased to prevent BOSH disconnections                                                  |
-
-### Settings Managed via Jitsi Web UI
-
-Meeting-level settings are configured through the web interface during a meeting (audio/video devices, screen sharing, etc.).
-
----
-
-## Network Access and Interfaces
-
-| Interface          | Port  | Protocol | Purpose                                    |
-| ------------------ | ----- | -------- | ------------------------------------------ |
-| Web UI             | 8000  | HTTP     | Jitsi Meet web interface                   |
-| Video Bridge Media | 10000 | UDP      | WebRTC media transport for video and audio |
-
-**Access methods:**
-
-- LAN IP with unique port
-- `<hostname>.local` with unique port
-- Tor `.onion` address
-- Custom domains (if configured)
-
-**Clearnet requirements:** For video calls over the public internet, the Video Bridge Media interface needs a public IPv4 address. For clients behind restrictive firewalls, install the Coturn package and give it a public domain — Jitsi advertises it to clients automatically.
-
----
-
-## Actions (StartOS UI)
-
-### Create / Reset Admin Password
-
-| Property     | Value                                            |
-| ------------ | ------------------------------------------------ |
-| ID           | `reset-password`                                 |
-| Name         | Create Admin Password / Reset Admin Password     |
-| Visibility   | Enabled                                          |
-| Availability | Any status                                       |
-| Purpose      | Generate admin credentials for creating meetings |
-
-**Inputs:** None
-
-**Output:** Displays username (`admin`) and a randomly generated 32-character password.
-
-The action registers the admin user in Prosody's internal auth database. If an admin already exists, it is deleted and re-created with the new password.
-
----
+| Variable                           | Value                      | Why it differs from upstream's compose deployment                                                                                        |
+| ---------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `ENABLE_AUTH`, `AUTH_TYPE`         | on, internal               | Only an authenticated user can start a meeting                                                                                           |
+| `ENABLE_GUESTS`                    | on                         | Anyone with the link can join one that has started                                                                                       |
+| `DISABLE_HTTPS`                    | on                         | StartOS terminates TLS at the edge                                                                                                       |
+| `BOSH_RELATIVE`                    | on                         | A relative BOSH URL works from any address — `.local`, clearnet, or Tor — without the client knowing the public hostname                 |
+| `ENABLE_XMPP_WEBSOCKET`            | off                        | The websocket URL has no relative form and would be generated as an unreachable absolute address; disabling it makes the client use BOSH |
+| `JVB_ADVERTISE_PRIVATE_CANDIDATES` | off                        | Bridge-internal addresses are unroutable for clients and can stall connection setup if offered                                           |
+| `JVB_ADVERTISE_IPS`                | the published public IPv4s | The bridge advertises the addresses StartOS publishes rather than one discovered by STUN                                                 |
+| `TURN_*`, `STUN_*`, `TURNS_*`      | derived from Coturn        | Set only when Coturn has a public domain and its secret is readable                                                                      |
 
 ## Dependencies
 
-| Dependency                                             | Requirement                      | Purpose                                                                     |
-| ------------------------------------------------------ | -------------------------------- | --------------------------------------------------------------------------- |
-| [Coturn](https://github.com/Start9Labs/coturn-startos) | Required, running (`>=4.14.0:0`) | TURN/STUN relay for calls that can't connect directly through NAT/firewalls |
+One, declared required, and reached in two different ways.
 
-Jitsi reads Coturn's public `turn`/`turns` endpoint from its exported `turn` interface (picking the plain vs TLS address by its `ssl` flag) and its shared secret from Coturn's `main` volume (subpath `shared`, mounted read-only). If Coturn isn't installed or has no public domain yet, Jitsi still runs — calls simply fall back to direct connectivity without a relay.
+| Dependency | Kind      | Health checks | Mount                                  | Why                                  |
+| ---------- | --------- | ------------- | -------------------------------------- | ------------------------------------ |
+| Coturn     | `running` | none          | `shared` subpath, read-only, temporary | TURN/STUN relay for calls behind NAT |
 
----
+**No health check is required deliberately.** Coturn's own check reports `disabled` until a public domain is attached to it, which would show as a permanent unmet-dependency warning here — while Jitsi in fact degrades gracefully, running without a relay. Coturn's own checks are what prompt the user to finish setting it up.
 
-## Backups and Restore
+Jitsi reads two things from Coturn: its public TURN and TURNS addresses, resolved from Coturn's own interface, and its shared secret. Both must be available for the relay to be advertised; if either is missing, prosody is started without TURN and calls work only where a direct connection is possible.
 
-**Included in backup:**
+## Network Access and Interfaces
 
-- `main` volume — All component configurations, Prosody user data, and `store.json`
+Two interfaces, and both matter for a call to work.
 
-**Restore behavior:**
+| Interface          | Id          | Type | Port  | Description                |
+| ------------------ | ----------- | ---- | ----- | -------------------------- |
+| Web UI             | `ui`        | ui   | 8000  | The Jitsi Meet client      |
+| Video Bridge Media | `jvb-media` | api  | 10000 | The WebRTC media transport |
 
-- All configuration and admin credentials restored
-- Internal auth passwords preserved
+**Exposing the web UI publicly is not enough.** Media does not flow through the web interface — it goes directly to the video bridge — so a publicly-reachable UI with no public address on the media interface produces meetings that join and then carry no audio or video. The bridge's health check detects exactly that combination and reports it; see [Health Checks](#health-checks).
 
----
+## Installation and First-Run Flow
+
+Install generates the two internal credentials and raises a `critical` task for the third. There is no wizard.
+
+The ordering that matters is Coturn's: it should be installed **and given a public domain** before you rely on Jitsi for calls across networks, because that is what makes a relay available. Jitsi will start and work without it on a local network.
+
+If you intend to use Jitsi over the internet, enable a public IPv4 address on the **Video Bridge Media** interface as well as on the web UI.
+
+## Actions
+
+One action, which renames itself to match what running it will do.
+
+### Create / Reset Admin Password
+
+Sets the password for the `admin` account that is allowed to start meetings.
+
+- **What it changes:** registers or overwrites that account in prosody's own account store, and records the password in `store.json`.
+- **How:** in a temporary container, rendering a throwaway prosody config from the same templates the running container uses — the live config is generated under `/run` and is not reachable from outside it.
+- **Cost:** seconds. Runnable running or stopped.
+- **Repeat safety:** safe to re-run; the registration overwrites the existing account, and each run generates a fresh password.
+- **Outputs:** the username `admin` and the new password, masked and copyable.
+
+Guests do not need this. It is required only to **start** a meeting; anyone with the link can join one already running.
+
+## Tasks
+
+One task, raised at install, and it blocks the service until you clear it.
+
+| Task                  | Severity   | Raised when                             | Cleared when    |
+| --------------------- | ---------- | --------------------------------------- | --------------- |
+| Create Admin Password | `critical` | At init, while no admin password is set | The action runs |
+
+`critical` because without it there is no account able to start a meeting, and the alternative — leaving meeting creation open — is not a safe default for a server reachable from the internet.
 
 ## Health Checks
 
-| Check   | Display Name     | Method                                   | Grace Period |
-| ------- | ---------------- | ---------------------------------------- | ------------ |
-| Prosody | XMPP Server      | Port 5280 listening                      | 30 seconds   |
-| Web     | Web Interface    | Port 8000 listening                      | —            |
-| Jicofo  | Conference Focus | HTTP check `localhost:8888/about/health` | —            |
-| JVB     | Video Bridge     | Port 8080 listening + public IP check    | —            |
+Four checks, one per daemon.
 
-**Conditional health check behavior:**
+| Check     | Displayed          | Method                                            | Grace |
+| --------- | ------------------ | ------------------------------------------------- | ----- |
+| `prosody` | "XMPP Server"      | Prosody's port is listening                       | 30s   |
+| `web`     | "Web Interface"    | The UI port is listening                          | —     |
+| `jicofo`  | "Conference Focus" | Its own health endpoint                           | —     |
+| `jvb`     | "Video Bridge"     | Its port, plus whether it can be reached publicly | —     |
 
-- **Video Bridge** shows "failure" with guidance if the UI is publicly accessible but JVB has no public IPv4 address.
+**`jvb` reports more than liveness.** After confirming the bridge is up, it fails if the web UI is publicly reachable while the media interface has no public IPv4 — the state in which meetings connect but carry no media. The message names the interface to fix. On a purely local setup neither is public and the check passes.
 
-The TURN relay's own health (including whether it has a public domain) is surfaced on the Coturn service and via the Coturn dependency status shown on Jitsi's page.
+**`prosody` failing takes everything with it**, since the other three authenticate against it; its 30-second grace covers account migration on first start.
 
----
+## Backups and Restore
+
+The `main` volume is copied wholesale — `sdk.Backups.ofVolumes('main')`. No dump step and nothing excluded.
+
+- **Included:** the XMPP accounts, every component's seed configuration, and `store.json` with all three credentials.
+- **Restore:** complete. The admin account and password come back together, so no task is raised. Coturn must be installed and configured again on the restored server for relaying to work — its secret and domain are its own package's backup, not this one's.
 
 ## Limitations and Differences
 
-1. **WebRTC media requires direct connectivity** — Video calls work on LAN but require a public IPv4 on the Video Bridge interface for clearnet access
-2. **No Tor support for media traffic** — WebRTC requires low latency and UDP, which Tor cannot provide
-3. **TURN relay requires the Coturn package with a public domain** — Needed for clients behind restrictive firewalls; not available on LAN-only setups
-4. **XMPP WebSocket disabled** — Client uses BOSH for XMPP transport to avoid absolute URL issues across multiple access methods
-5. **No recording or streaming** — Jibri (recording/streaming component) is not included
-
----
-
-## What Is Unchanged from Upstream
-
-- Full video conferencing functionality
-- Screen sharing
-- Chat messaging
-- Multiple participants
-- Guest access (no account needed to join)
-- Browser-based (no client installation required)
-- End-to-end encryption (when supported by browser)
-- Omelette breakout rooms
-- Omelette polls and reactions
-
----
-
-## Contributing
-
-Build and development workflow follow the StartOS packaging guide: <https://docs.start9.com/packaging>. Keep `README.md`, `instructions.md`, and `AGENTS.md` in sync with any change to user-visible behavior or package structure.
+1. **A password is required before the service will start.** Meeting creation is authenticated; joining is not.
+2. **Media needs its own public address.** Exposing only the web UI produces calls that connect and then carry nothing.
+3. **TURN is only advertised when Coturn has a public domain** and its secret is readable. Without it, calls work only where a direct connection is possible.
+4. **The XMPP websocket transport is disabled** and the client uses BOSH, because the websocket URL is always generated as an absolute address that would not be reachable.
+5. **TLS is terminated by StartOS**, so the web container serves plain HTTP.
+6. **Coturn's health is deliberately not gated on.** An unconfigured Coturn does not stop Jitsi from running.
+7. **No riscv64 build.** x86_64 and aarch64 only.
 
 ---
 
@@ -223,62 +190,63 @@ Build and development workflow follow the StartOS packaging guide: <https://docs
 
 ```yaml
 package_id: jitsi
-images:
-  web: ghcr.io/jitsi/web
-  prosody: ghcr.io/jitsi/prosody
-  jicofo: ghcr.io/jitsi/jicofo
-  jvb: ghcr.io/jitsi/jvb
-architectures: [x86_64, aarch64]
+image: ghcr.io/jitsi/web # plus jitsi/prosody, jitsi/jicofo, jitsi/jvb
+architectures:
+  - x86_64
+  - aarch64
+subcontainers:
+  - web-sub # nginx and the client
+  - prosody-sub # XMPP server
+  - jicofo-sub # conference focus
+  - jvb-sub # video bridge
 volumes:
-  main: prosody/, prosody-storage/, web/, jicofo/, jvb/, store.json
-ports:
-  ui: 8000
-  jvb_media: 10000/udp
-dependencies:
-  coturn: { required: true, kind: running, versionRange: ">=4.14.0:0" }
-consumes_from_coturn:
-  endpoint: sdk.host.get(effects, { hostId: 'turn', packageId: 'coturn' }) # turn=ssl:false, turns=ssl:true
-  shared_secret: mount coturn main volume subpath 'shared' read-only, read file 'turn-secret'
+  main: per-component subpaths → /config, prosody accounts → /var/lib/prosody, store.json at the root
+file_models:
+  - store.json
 startos_managed_env_vars:
-  common:
-    - TZ
-    - XMPP_DOMAIN
-    - XMPP_AUTH_DOMAIN
-    - XMPP_MUC_DOMAIN
-    - XMPP_INTERNAL_MUC_DOMAIN
-    - XMPP_GUEST_DOMAIN
-    - XMPP_SERVER
-  prosody:
-    - ENABLE_AUTH
-    - ENABLE_GUESTS
-    - AUTH_TYPE
-    - JICOFO_AUTH_USER
-    - JICOFO_AUTH_PASSWORD
-    - JVB_AUTH_USER
-    - JVB_AUTH_PASSWORD
-    - TURN_CREDENTIALS
-    - TURN_TRANSPORT
-    - STUN_HOST
-    - STUN_PORT
-    - TURN_HOST
-    - TURN_PORT
-    - TURNS_HOST
-    - TURNS_PORT
-  web:
-    - DISABLE_HTTPS
-    - BOSH_RELATIVE
-    - ENABLE_XMPP_WEBSOCKET
-    - XMPP_BOSH_URL_BASE
-  jvb:
-    - JVB_PORT
-    - JVB_BREWERY_MUC
-    - JVB_ADVERTISE_IPS
-    - COLIBRI_REST_ENABLED
+  - TZ
+  - XMPP_DOMAIN
+  - XMPP_AUTH_DOMAIN
+  - XMPP_MUC_DOMAIN
+  - XMPP_INTERNAL_MUC_DOMAIN
+  - XMPP_GUEST_DOMAIN
+  - XMPP_SERVER
+  - ENABLE_AUTH
+  - ENABLE_GUESTS
+  - AUTH_TYPE
+  - JICOFO_AUTH_USER
+  - JICOFO_AUTH_PASSWORD
+  - JVB_AUTH_USER
+  - JVB_AUTH_PASSWORD
+  - JVB_PORT
+  - JVB_BREWERY_MUC
+  - COLIBRI_REST_ENABLED
+  - JVB_ADVERTISE_PRIVATE_CANDIDATES
+  - JVB_ADVERTISE_IPS # when a public IPv4 is published
+  - DISABLE_HTTPS
+  - BOSH_RELATIVE
+  - ENABLE_XMPP_WEBSOCKET
+  - XMPP_BOSH_URL_BASE
+  - TURN_CREDENTIALS # when Coturn is usable
+  - TURN_TRANSPORT # when Coturn is usable
+  - STUN_HOST # when Coturn is usable
+  - STUN_PORT # when Coturn is usable
+  - TURN_HOST # when Coturn is usable
+  - TURN_PORT # when Coturn is usable
+  - TURNS_HOST # when Coturn serves TLS
+  - TURNS_PORT # when Coturn serves TLS
+dependencies:
+  - coturn # required; no health check gated, deliberately
+interfaces:
+  ui: { type: ui, port: 8000 }
+  jvb-media: { type: api, port: 10000 }
 actions:
-  - reset-password (enabled, any)
+  - reset-password # renames itself to "Create Admin Password" when unset
+tasks:
+  - { action: reset-password, severity: critical }
 health_checks:
-  - port_listening: [5280, 8000, 8080]
-  - http_check: 8888 (/about/health)
-backup_volumes:
-  - main
+  - prosody # displayed "XMPP Server"
+  - web # displayed "Web Interface"
+  - jicofo # displayed "Conference Focus"
+  - jvb # displayed "Video Bridge"; also reports a missing public media address
 ```
