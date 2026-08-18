@@ -161,6 +161,31 @@ export const main = sdk.setupMain(async ({ effects }) => {
       },
       requires: [],
     })
+    .addOneshot('prosody-data-relocate', {
+      subcontainer: prosodySub,
+      // stable-11146-2 moved prosody's data_path down into a `data/`
+      // subdirectory of the storage volume. Upstream only migrates from the
+      // /config seed, so accounts written by earlier releases are left at the
+      // root of the volume where the new config never looks for them.
+      exec: {
+        command: [
+          'sh',
+          '-c',
+          [
+            `data="${prosodyStorageMountpoint}/data"`,
+            `if [ -n "$(ls -A "$data" 2>/dev/null)" ]; then exit 0; fi`,
+            `mkdir -p "$data"`,
+            `for entry in "${prosodyStorageMountpoint}"/*; do`,
+            `  [ -e "$entry" ] || continue`,
+            `  [ "$entry" = "$data" ] && continue`,
+            `  mv "$entry" "$data/"`,
+            `done`,
+          ].join('\n'),
+        ],
+        user: 'root',
+      },
+      requires: [],
+    })
     .addOneshot('prosody-chown', {
       subcontainer: prosodySub,
       // /config is included because releases before 2.0.11146 ran prosody as
@@ -179,7 +204,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
         ],
         user: 'root',
       },
-      requires: [],
+      requires: ['prosody-data-relocate'],
     })
     .addDaemon('prosody', {
       subcontainer: prosodySub,

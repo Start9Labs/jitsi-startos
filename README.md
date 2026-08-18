@@ -50,7 +50,7 @@ Four upstream images, unmodified, each run as its container's init process.
 | `jicofo-sub`  | The conference focus, which allocates a bridge per meeting                                   |
 | `jvb-sub`     | The video bridge, which carries the actual media                                             |
 
-Startup is ordered: `prosody` first, then `web`, `jicofo`, and `jvb` alongside it. Two oneshots run before their daemons — `nginx-patch` writes a longer proxy timeout so long-lived BOSH connections are not cut, and `prosody-chown` hands the config and account directories to the unprivileged user the image runs as.
+Startup is ordered: `prosody` first, then `web`, `jicofo`, and `jvb` alongside it. Three oneshots run before their daemons — `nginx-patch` writes a longer proxy timeout so long-lived BOSH connections are not cut, `prosody-data-relocate` moves accounts left at the root of the storage volume into the `data/` subdirectory upstream now reads, and `prosody-chown` hands the config and account directories to the unprivileged user the image runs as.
 
 ## Volume and Data Layout
 
@@ -62,7 +62,7 @@ One volume, subdivided per component. Each image reads its seed configuration fr
 | `main` | one subpath each → `/config` in `web`, `jicofo`, `jvb`       | Their seed configuration                       |
 | `main` | root                                                         | `store.json`                                   |
 
-Prosody's **accounts** live at `/var/lib/prosody`, on their own subpath, rather than under `/config`. Upstream generates prosody's live configuration under `/run` and treats `/config` as a seed, so account data placed there would not survive a restart.
+Prosody's **accounts** live at `/var/lib/prosody/data`, on their own subpath, rather than under `/config`. Upstream generates prosody's live configuration under `/run` and treats `/config` as a seed, so account data placed there would not survive a restart. Upstream moved `data_path` into the `data/` subdirectory in `stable-11146-2`; the `prosody-data-relocate` oneshot moves accounts written by earlier releases across, since upstream only migrates from the `/config` seed.
 
 Coturn's shared secret is read through a **read-only mount of just the `shared` subpath** of Coturn's volume, into a throwaway container — never the volume root, and never into a running daemon.
 
@@ -200,7 +200,7 @@ subcontainers:
   - jicofo-sub # conference focus
   - jvb-sub # video bridge
 volumes:
-  main: per-component subpaths → /config, prosody accounts → /var/lib/prosody, store.json at the root
+  main: per-component subpaths → /config, prosody accounts → /var/lib/prosody/data, store.json at the root
 file_models:
   - store.json
 startos_managed_env_vars:
