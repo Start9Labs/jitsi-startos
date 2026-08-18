@@ -1,4 +1,9 @@
 import { VersionInfo, IMPOSSIBLE } from '@start9labs/start-sdk'
+import { mkdir, readdir, rename } from 'node:fs/promises'
+import { sdk } from '../sdk'
+import { configMountpoint, prosodyMounts, prosodyUser } from '../utils'
+
+const prosodyStorage = sdk.volumes.main.subpath('prosody-storage')
 
 export const current = VersionInfo.of({
   version: '2.0.11146:2',
@@ -25,7 +30,31 @@ export const current = VersionInfo.of({
 - Notes de version complètes : https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11146-2`,
   },
   migrations: {
-    up: async ({ effects }) => {},
+    up: async ({ effects }) => {
+      // stable-11146-2 moved prosody's data_path into a `data/` subdirectory,
+      // and upstream's only migration copies from the /config seed — so
+      // accounts written by earlier releases are left at the storage root.
+      const data = `${prosodyStorage}/data`
+      await mkdir(data, { recursive: true })
+      for (const entry of await readdir(prosodyStorage))
+        if (entry !== 'data')
+          await rename(`${prosodyStorage}/${entry}`, `${data}/${entry}`)
+
+      // Releases before 2.0.11146 ran prosody as root, leaving the seed owned
+      // by uid 100 with modes uid 1000 cannot read. The image only ever reads
+      // /config.
+      await sdk.SubContainer.withTemp(
+        effects,
+        { imageId: 'prosody' },
+        prosodyMounts,
+        'prosody-config-chown',
+        (subc) =>
+          subc.execFail(
+            ['chown', '-R', `${prosodyUser}:${prosodyUser}`, configMountpoint],
+            { user: 'root' },
+          ),
+      )
+    },
     down: IMPOSSIBLE,
   },
 })
