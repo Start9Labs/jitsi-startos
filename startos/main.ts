@@ -2,7 +2,6 @@ import { storeJson } from './fileModels/store.json'
 import { i18n } from './i18n'
 import { sdk } from './sdk'
 import {
-  configMountpoint,
   coturnHostId,
   coturnId,
   coturnMountpoint,
@@ -163,18 +162,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
     })
     .addOneshot('prosody-chown', {
       subcontainer: prosodySub,
-      // /config is included because releases before 2.0.11146 ran prosody as
-      // root, leaving the seed owned by uid 100 with mode 0750 on data/ and
-      // 0400 on the certs. uid 1000 can read neither, so upstream's
-      // /config/data -> /var/lib/prosody account migration and its cert copy
-      // both fail silently, and the missing key is not regenerated because the
-      // matching .crt did copy across.
       exec: {
         command: [
           'chown',
           '-R',
           `${prosodyUser}:${prosodyUser}`,
-          configMountpoint,
           prosodyStorageMountpoint,
         ],
         user: 'root',

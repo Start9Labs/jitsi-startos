@@ -44,9 +44,10 @@ export const xmppConfig = {
 // Every image reads its seed configuration from /config.
 export const configMountpoint = '/config'
 
-// Prosody keeps XMPP accounts under `data_path` (/var/lib/prosody). Upstream
-// generates its config under /run and treats /config as a read-only seed, so
-// account data must live on its own volume subpath to survive a restart.
+// Prosody keeps XMPP accounts under `data_path`, which is a `data/`
+// subdirectory of this mountpoint as of stable-11146-2. Upstream generates its
+// config under /run and treats /config as a read-only seed, so account data
+// must live on its own volume subpath to survive a restart.
 export const prosodyStorageMountpoint = '/var/lib/prosody'
 
 // The image runs as `s6` (uid 1000); StartOS mounts volumes root-owned, and

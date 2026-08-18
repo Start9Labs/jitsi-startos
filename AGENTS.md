@@ -27,7 +27,6 @@ verified, tried, and decided belongs in the commit message and the PR body.
 ## This repo
 
 - **Prosody's accounts must stay on their own subpath at `/var/lib/prosody`.** Upstream generates prosody's live config under `/run` and treats `/config` as a read-only seed, so accounts written there do not survive a restart.
-- **`prosody-chown` covers `/config` as well as the storage path, and that is deliberate.** Releases before `2.0.11146` ran prosody as root, leaving the seed owned by uid 100 with modes uid 1000 cannot read — under which upstream's account migration and cert copy both fail _silently_, and the missing key is not regenerated because the matching `.crt` did copy. Don't narrow it.
 - **Read Coturn's secret through the `shared` subpath only, read-only, in a throwaway container.** Never mount Coturn's volume root, and never mount it into a running daemon — a missing or broken Coturn must not be able to take prosody down.
 - **Don't add a health check to the Coturn dependency.** Coturn's own `coturn` check reports `disabled` until a public domain is attached, which would surface here as a permanent unmet-dependency warning even though Jitsi degrades gracefully to relay-less operation. Coturn's own checks prompt the user.
 - **`ENABLE_XMPP_WEBSOCKET` stays off and `BOSH_RELATIVE` stays on.** There is no relative form for the websocket URL — it is always generated as an absolute `wss://localhost:8443`, which no client can reach across `.local`, clearnet, and Tor. BOSH's relative URL works from every origin.
