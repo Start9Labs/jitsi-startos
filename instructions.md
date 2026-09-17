@@ -28,6 +28,8 @@ The video bridge moves WebRTC media directly between participants and your serve
 
 LAN-only and Tor access to the Web UI work without these, but media for remote participants will not.
 
+The **Video Bridge Address** health check tells you which of these states you're in: green once the media interface has a public IPv4, red when the Web UI is public but the media interface isn't (meetings connect and carry no audio or video), and grey when nothing is public and remote participants relay through Coturn. The bridge only ever advertises the address you published — it never guesses one, so the check going grey is information, not a fault.
+
 ## Using Jitsi Meet
 
 ### Actions

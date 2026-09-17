@@ -29,7 +29,10 @@ export default {
     33: 'Tu contrasena de administrador ha sido establecida. Usa estas credenciales para crear reuniones.',
     34: 'Usuario',
     35: 'Contrasena',
+    41: 'Direccion del puente de video',
+    42: 'El puente de video anuncia su direccion IPv4 publica publicada.',
     38: 'Necesario para clearnet. Habilite una direccion IPv4 publica en la interfaz "Video Bridge Media".',
+    43: 'No hay IPv4 publica publicada. Los participantes remotos se conectan solo a traves del rele Coturn.',
   },
   de_DE: {
     0: 'Starte Jitsi Meet!',
@@ -59,7 +62,10 @@ export default {
     33: 'Ihr Administratorpasswort wurde festgelegt. Verwenden Sie diese Anmeldedaten um Meetings zu erstellen.',
     34: 'Benutzername',
     35: 'Passwort',
+    41: 'Videobridge-Adresse',
+    42: 'Die Videobridge kundigt ihre veroffentlichte offentliche IPv4-Adresse an.',
     38: 'Erforderlich fur Clearnet. Aktivieren Sie eine offentliche IPv4-Adresse in der "Video Bridge Media"-Schnittstelle.',
+    43: 'Keine offentliche IPv4 veroffentlicht. Entfernte Teilnehmer verbinden sich nur uber das Coturn-Relay.',
   },
   pl_PL: {
     0: 'Uruchamianie Jitsi Meet!',
@@ -89,7 +95,10 @@ export default {
     33: 'Haslo administratora zostalo ustawione. Uzyj tych danych logowania aby tworzyc spotkania.',
     34: 'Nazwa uzytkownika',
     35: 'Haslo',
+    41: 'Adres mostu wideo',
+    42: 'Most wideo rozglasza swoj opublikowany publiczny adres IPv4.',
     38: 'Wymagane dla clearnet. Wlacz publiczny adres IPv4 w interfejsie "Video Bridge Media".',
+    43: 'Nie opublikowano publicznego adresu IPv4. Zdalni uczestnicy lacza sie wylacznie przez przekaznik Coturn.',
   },
   fr_FR: {
     0: 'Demarrage de Jitsi Meet !',
@@ -119,6 +128,9 @@ export default {
     33: 'Votre mot de passe administrateur a ete defini. Utilisez ces identifiants pour creer des reunions.',
     34: "Nom d'utilisateur",
     35: 'Mot de passe',
+    41: 'Adresse du pont video',
+    42: 'Le pont video annonce son adresse IPv4 publique publiee.',
     38: 'Requis pour le clearnet. Activez une adresse IPv4 publique dans l\'interface "Video Bridge Media".',
+    43: 'Aucune IPv4 publique publiee. Les participants distants se connectent uniquement via le relais Coturn.',
   },
 } satisfies Record<string, LangDict>
