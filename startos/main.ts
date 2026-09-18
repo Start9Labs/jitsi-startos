@@ -51,20 +51,22 @@ export const main = sdk.setupMain(async ({ effects }) => {
     })
     .const()
 
-  // If the UI is publicly accessible but JVB has no public IPv4, calls will fail
-  const uiIsPublic = await sdk.host
-    .getOwn(effects, uiHostId, (host) => {
-      const iface =
-        host &&
-        Object.values(host.bindings)
-          .flatMap((b) => Object.values(b.interfaces))
-          .find((i) => i.id === uiInterfaceId)
-      return !!iface?.addressInfo
-        .filter({ visibility: 'public' })
-        .format('hostname-info').length
-    })
-    .const()
-  const jvbMissingPublicIp = uiIsPublic && !jvbPublicIps?.length
+  const uiClearnetExposure = sdk.host.getOwn(effects, uiHostId, (host) => {
+    const iface =
+      host &&
+      Object.values(host.bindings)
+        .flatMap((b) => Object.values(b.interfaces))
+        .find((i) => i.id === uiInterfaceId)
+    return !!iface?.addressInfo
+      .filter({ visibility: 'public' })
+      .filter({ exclude: { kind: 'plugin' } })
+      .format('hostname-info').length
+  })
+  let uiIsClearnetPublic = await uiClearnetExposure.once()
+  uiClearnetExposure.onChange((next) => {
+    uiIsClearnetPublic = !!next
+    return { cancel: false }
+  })
 
   // Resolve the external Coturn package's public TURN endpoint. Coturn exposes a
   // single `turn` interface whose public-domain address set carries both the
@@ -279,6 +281,17 @@ export const main = sdk.setupMain(async ({ effects }) => {
           // fc00::/7 IPv6 ULA). Clients can't route to them, and offering
           // them as high-priority pairs can stall ICE/DTLS on some networks.
           JVB_ADVERTISE_PRIVATE_CANDIDATES: 'false',
+          // The advertised address comes from the published interface, full
+          // stop. ice4j's STUN mapping harvester reports whatever the box's
+          // default route exits from — a VPN exit, an upstream NAT — which is
+          // not what StartOS published, and upstream keeps it enabled by
+          // default (meet-jit-si-turnrelay.jitsi.net:443) ADDITIVELY: left on,
+          // its reflexive address is offered alongside JVB_ADVERTISE_IPS, and
+          // in place of it whenever no public IPv4 is published. Without a
+          // published address the bridge now offers no public candidate at
+          // all and remote participants need a configured Coturn relay, which the
+          // `jvb-public-address` check below reports.
+          JVB_DISABLE_STUN: 'true',
           ...(jvbPublicIps?.length
             ? { JVB_ADVERTISE_IPS: jvbPublicIps.join(',') }
             : {}),
@@ -286,27 +299,43 @@ export const main = sdk.setupMain(async ({ effects }) => {
       },
       ready: {
         display: i18n('Video Bridge'),
-        fn: async () => {
-          const portCheck = await sdk.healthCheck.checkPortListening(
-            effects,
-            jvbHttpPort,
-            {
-              successMessage: i18n('The video bridge is ready'),
-              errorMessage: i18n('The video bridge is not ready'),
-            },
-          )
-          if (portCheck.result !== 'success') return portCheck
-          if (jvbMissingPublicIp) {
-            return {
-              result: 'failure' as const,
-              message: i18n(
-                'Required for clearnet. Enable a public IPv4 address in the "Video Bridge Media" interface.',
-              ),
-            }
-          }
-          return portCheck
-        },
+        fn: () =>
+          sdk.healthCheck.checkPortListening(effects, jvbHttpPort, {
+            successMessage: i18n('The video bridge is ready'),
+            errorMessage: i18n('The video bridge is not ready'),
+          }),
       },
       requires: ['prosody'],
+    })
+    .addHealthCheck('jvb-public-address', {
+      ready: {
+        display: i18n('Video Bridge Address'),
+        trigger: sdk.trigger.statusTrigger(30_000, {
+          starting: 5_000,
+          failure: 5_000,
+        }),
+        fn: () =>
+          jvbPublicIps?.length
+            ? {
+                result: 'success' as const,
+                message: i18n(
+                  'The video bridge advertises its published public IPv4.',
+                ),
+              }
+            : uiIsClearnetPublic
+              ? {
+                  result: 'failure' as const,
+                  message: i18n(
+                    'Required for clearnet. Enable a public IPv4 address in the "Video Bridge Media" interface.',
+                  ),
+                }
+              : {
+                  result: 'disabled' as const,
+                  message: i18n(
+                    'No public IPv4 published. Remote participants require a configured Coturn relay.',
+                  ),
+                },
+      },
+      requires: ['jvb'],
     })
 })

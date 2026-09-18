@@ -84,16 +84,17 @@ The two internal credentials are generated once and never shown — nothing asks
 
 **No configuration file reaches the applications.** Every component is configured by environment, composed on each start, and that is where this package's overrides live:
 
-| Variable                           | Value                      | Why it differs from upstream's compose deployment                                                                                        |
-| ---------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `ENABLE_AUTH`, `AUTH_TYPE`         | on, internal               | Only an authenticated user can start a meeting                                                                                           |
-| `ENABLE_GUESTS`                    | on                         | Anyone with the link can join one that has started                                                                                       |
-| `DISABLE_HTTPS`                    | on                         | StartOS terminates TLS at the edge                                                                                                       |
-| `BOSH_RELATIVE`                    | on                         | A relative BOSH URL works from any address — `.local`, clearnet, or Tor — without the client knowing the public hostname                 |
-| `ENABLE_XMPP_WEBSOCKET`            | off                        | The websocket URL has no relative form and would be generated as an unreachable absolute address; disabling it makes the client use BOSH |
-| `JVB_ADVERTISE_PRIVATE_CANDIDATES` | off                        | Bridge-internal addresses are unroutable for clients and can stall connection setup if offered                                           |
-| `JVB_ADVERTISE_IPS`                | the published public IPv4s | The bridge advertises the addresses StartOS publishes rather than one discovered by STUN                                                 |
-| `TURN_*`, `STUN_*`, `TURNS_*`      | derived from Coturn        | Set only when Coturn has a public domain and its secret is readable                                                                      |
+| Variable                           | Value                      | Why it differs from upstream's compose deployment                                                                                                                                        |
+| ---------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ENABLE_AUTH`, `AUTH_TYPE`         | on, internal               | Only an authenticated user can start a meeting                                                                                                                                           |
+| `ENABLE_GUESTS`                    | on                         | Anyone with the link can join one that has started                                                                                                                                       |
+| `DISABLE_HTTPS`                    | on                         | StartOS terminates TLS at the edge                                                                                                                                                       |
+| `BOSH_RELATIVE`                    | on                         | A relative BOSH URL works from any address — `.local`, clearnet, or Tor — without the client knowing the public hostname                                                                 |
+| `ENABLE_XMPP_WEBSOCKET`            | off                        | The websocket URL has no relative form and would be generated as an unreachable absolute address; disabling it makes the client use BOSH                                                 |
+| `JVB_ADVERTISE_PRIVATE_CANDIDATES` | off                        | Bridge-internal addresses are unroutable for clients and can stall connection setup if offered                                                                                           |
+| `JVB_ADVERTISE_IPS`                | the published public IPv4s | The bridge advertises the addresses StartOS publishes, and only those                                                                                                                    |
+| `JVB_DISABLE_STUN`                 | on                         | Upstream's STUN mapping harvester is additive and would advertise whatever the box's default route exits from — a VPN exit, an upstream NAT — beside or instead of the published address |
+| `TURN_*`, `STUN_*`, `TURNS_*`      | derived from Coturn        | Set only when Coturn has a public domain and its secret is readable                                                                                                                      |
 
 ## Dependencies
 
@@ -116,9 +117,9 @@ Two interfaces, and both matter for a call to work.
 | Web UI             | `ui`        | ui   | 8000  | The Jitsi Meet client      |
 | Video Bridge Media | `jvb-media` | api  | 10000 | The WebRTC media transport |
 
-**Neither interface is sufficient alone.** The web interface serves the client and, because `BOSH_RELATIVE` is on, proxies all XMPP signaling at `/http-bind`; the media interface carries only WebRTC media. So a public media address with a LAN-only UI leaves remote guests unable to load the page or join the room at all, and a publicly-reachable UI with no public address on the media interface produces meetings that join and then carry no audio or video. The bridge's health check detects the second combination and reports it; see [Health Checks](#health-checks).
+**Neither interface is sufficient alone.** The web interface serves the client and proxies all of its XMPP signaling at `/http-bind` — `BOSH_RELATIVE` keeps that on whichever origin the page was loaded from; the media interface carries only WebRTC media. So a public media address with a LAN-only UI leaves remote guests unable to load the page or join the room at all, and a clearnet-reachable UI with no public address on the media interface produces meetings that join and then carry no audio or video. The `jvb-public-address` health check detects the second combination and reports it; see [Health Checks](#health-checks).
 
-The web interface needs a **public domain**, not a bare IP: browsers gate camera and microphone access on a secure context, and the domain is what StartOS terminates trusted TLS for on 443. The media interface needs a public IPv4, and its transport is **UDP only** — the package sets only `JVB_PORT`, and upstream's TCP fallback harvester is not enabled, so nothing listens on TCP 10000. StartOS's own port reachability check is a TCP connect, so it can report 10000 as closed while UDP media works.
+The web interface needs a **public domain**, not a bare IP: a public IPv4 on it is still served over HTTPS, but under the StartOS root CA, so every guest lands on a certificate warning; the domain is what StartOS terminates trusted TLS for on 443. The media interface needs a public IPv4, and its transport is **UDP only** — JVB's ICE/TCP is off by default and the image exposes no switch for it, so nothing listens on TCP 10000. StartOS's own port reachability check is a TCP connect, so it can report 10000 as closed while UDP media works.
 
 ## Installation and First-Run Flow
 
@@ -156,16 +157,23 @@ One task, raised at install, and it blocks the service until you clear it.
 
 ## Health Checks
 
-Four checks, one per daemon.
+Four daemon checks, plus one standalone check for the bridge's public address.
 
-| Check     | Displayed          | Method                                            | Grace |
-| --------- | ------------------ | ------------------------------------------------- | ----- |
-| `prosody` | "XMPP Server"      | Prosody's port is listening                       | 30s   |
-| `web`     | "Web Interface"    | The UI port is listening                          | —     |
-| `jicofo`  | "Conference Focus" | Its own health endpoint                           | —     |
-| `jvb`     | "Video Bridge"     | Its port, plus whether it can be reached publicly | —     |
+| Check                | Displayed              | Method                                 | Grace |
+| -------------------- | ---------------------- | -------------------------------------- | ----- |
+| `prosody`            | "XMPP Server"          | Prosody's port is listening            | 30s   |
+| `web`                | "Web Interface"        | The UI port is listening               | —     |
+| `jicofo`             | "Conference Focus"     | Its own health endpoint                | —     |
+| `jvb`                | "Video Bridge"         | Its port is listening                  | —     |
+| `jvb-public-address` | "Video Bridge Address" | Which address the bridge can advertise | —     |
 
-**`jvb` reports more than liveness.** After confirming the bridge is up, it fails if the web UI is publicly reachable while the media interface has no public IPv4 — the state in which meetings connect but carry no media. The message names the interface to fix. On a purely local setup neither is public and the check passes.
+**`jvb-public-address` is where the media-address problem surfaces**, and it reports all three states rather than only the broken one:
+
+- **success** — a public IPv4 is published on the media interface, and that is what the bridge advertises.
+- **failure** — the web UI is reachable on clearnet while the media interface has no public IPv4: meetings connect and carry no media. The message names the interface to fix. While failing it polls every 5 seconds instead of 30, so it clears promptly once the address is enabled.
+- **disabled** — the web UI has no clearnet address. Direct bridge access is unavailable, and remote participants require a configured Coturn relay. This is the ordinary state of a purely local or Tor-only setup.
+
+Because STUN is disabled, a bridge with no published address advertises no public candidate at all rather than a wrong one — there is no silent middle state in which the bridge advertises an address StartOS never published.
 
 **`prosody` failing takes everything with it**, since the other three authenticate against it; its 30-second grace covers account migration on first start.
 
@@ -179,7 +187,7 @@ The `main` volume is copied wholesale — `sdk.Backups.ofVolumes('main')`. No du
 ## Limitations and Differences
 
 1. **A password is required before the service will start.** Meeting creation is authenticated; joining is not.
-2. **Media needs its own public address, and so does the UI.** Exposing only the web UI produces calls that connect and then carry nothing; exposing only the media interface leaves remote guests unable to load the client or reach signaling, both of which come from the web interface. Media is **UDP only** — nothing listens on TCP 10000, and StartOS's TCP-based reachability check may therefore report it closed even when media works.
+2. **Media needs its own public address, and so does the UI.** Exposing only the web UI produces calls that connect and then carry nothing — the bridge never falls back to a STUN-discovered address, so without a published public IPv4 remote participants reach it only through Coturn. Exposing only the media interface leaves remote guests unable to load the client or reach signaling, both of which come from the web interface. Media is **UDP only** — nothing listens on TCP 10000, and StartOS's TCP-based reachability check may therefore report it closed even when media works.
 3. **TURN is only advertised when Coturn has a public domain** and its secret is readable. Without it, calls work only where a direct connection is possible.
 4. **The XMPP websocket transport is disabled** and the client uses BOSH, because the websocket URL is always generated as an absolute address that would not be reachable.
 5. **TLS is terminated by StartOS**, so the web container serves plain HTTP.
@@ -224,6 +232,7 @@ startos_managed_env_vars:
   - JVB_BREWERY_MUC
   - COLIBRI_REST_ENABLED
   - JVB_ADVERTISE_PRIVATE_CANDIDATES
+  - JVB_DISABLE_STUN
   - JVB_ADVERTISE_IPS # when a public IPv4 is published
   - DISABLE_HTTPS
   - BOSH_RELATIVE
@@ -250,5 +259,6 @@ health_checks:
   - prosody # displayed "XMPP Server"
   - web # displayed "Web Interface"
   - jicofo # displayed "Conference Focus"
-  - jvb # displayed "Video Bridge"; also reports a missing public media address
+  - jvb # displayed "Video Bridge"
+  - jvb-public-address # displayed "Video Bridge Address"; success / failure / disabled per published address
 ```

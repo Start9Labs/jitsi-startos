@@ -16,7 +16,10 @@ const dict = {
   'The video bridge is ready': 11,
   'The video bridge is not ready': 12,
 
+  'Video Bridge Address': 41,
+  'The video bridge advertises its published public IPv4.': 42,
   'Required for clearnet. Enable a public IPv4 address in the "Video Bridge Media" interface.': 38,
+  'No public IPv4 published. Remote participants require a configured Coturn relay.': 43,
 
   // interfaces.ts
   'Web UI': 16,
