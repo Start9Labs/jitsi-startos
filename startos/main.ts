@@ -51,28 +51,22 @@ export const main = sdk.setupMain(async ({ effects }) => {
     })
     .const()
 
-  // Whether the UI is publicly reachable feeds only the address health check
-  // below, never a daemon's config, so WATCH it rather than capturing it with
-  // `.const()`: a `.const()` read would restart every daemon each time an
-  // address is toggled on the UI interface. `.onChange` delivers the current
-  // value immediately and the loop unsubscribes itself when `main` leaves
-  // context on its next re-run.
-  let uiIsPublic = false
-  sdk.host
-    .getOwn(effects, uiHostId, (host) => {
-      const iface =
-        host &&
-        Object.values(host.bindings)
-          .flatMap((b) => Object.values(b.interfaces))
-          .find((i) => i.id === uiInterfaceId)
-      return !!iface?.addressInfo
-        .filter({ visibility: 'public' })
-        .format('hostname-info').length
-    })
-    .onChange((next) => {
-      uiIsPublic = !!next
-      return { cancel: false }
-    })
+  const uiClearnetExposure = sdk.host.getOwn(effects, uiHostId, (host) => {
+    const iface =
+      host &&
+      Object.values(host.bindings)
+        .flatMap((b) => Object.values(b.interfaces))
+        .find((i) => i.id === uiInterfaceId)
+    return !!iface?.addressInfo
+      .filter({ visibility: 'public' })
+      .filter({ exclude: { kind: 'plugin' } })
+      .format('hostname-info').length
+  })
+  let uiIsClearnetPublic = await uiClearnetExposure.once()
+  uiClearnetExposure.onChange((next) => {
+    uiIsClearnetPublic = !!next
+    return { cancel: false }
+  })
 
   // Resolve the external Coturn package's public TURN endpoint. Coturn exposes a
   // single `turn` interface whose public-domain address set carries both the
@@ -295,7 +289,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
           // its reflexive address is offered alongside JVB_ADVERTISE_IPS, and
           // in place of it whenever no public IPv4 is published. Without a
           // published address the bridge now offers no public candidate at
-          // all and remote participants relay through Coturn, which the
+          // all and remote participants need a configured Coturn relay, which the
           // `jvb-public-address` check below reports.
           JVB_DISABLE_STUN: 'true',
           ...(jvbPublicIps?.length
@@ -316,9 +310,6 @@ export const main = sdk.setupMain(async ({ effects }) => {
     .addHealthCheck('jvb-public-address', {
       ready: {
         display: i18n('Video Bridge Address'),
-        // While this is failing, poll every 5 s instead of the 30 s
-        // steady-state cadence so it flips green promptly once the operator
-        // enables the address (`.onChange` has already refreshed `uiIsPublic`).
         trigger: sdk.trigger.statusTrigger(30_000, {
           starting: 5_000,
           failure: 5_000,
@@ -331,7 +322,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
                   'The video bridge advertises its published public IPv4.',
                 ),
               }
-            : uiIsPublic
+            : uiIsClearnetPublic
               ? {
                   result: 'failure' as const,
                   message: i18n(
@@ -341,7 +332,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
               : {
                   result: 'disabled' as const,
                   message: i18n(
-                    'No public IPv4 published. Remote participants connect through the Coturn relay only.',
+                    'No public IPv4 published. Remote participants require a configured Coturn relay.',
                   ),
                 },
       },

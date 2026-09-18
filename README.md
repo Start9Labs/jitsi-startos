@@ -117,7 +117,7 @@ Two interfaces, and both matter for a call to work.
 | Web UI             | `ui`        | ui   | 8000  | The Jitsi Meet client      |
 | Video Bridge Media | `jvb-media` | api  | 10000 | The WebRTC media transport |
 
-**Exposing the web UI publicly is not enough.** Media does not flow through the web interface — it goes directly to the video bridge — so a publicly-reachable UI with no public address on the media interface produces meetings that join and then carry no audio or video. The `jvb-public-address` health check detects exactly that combination and reports it; see [Health Checks](#health-checks).
+**Exposing the web UI on clearnet is not enough.** Media does not flow through the web interface — it goes directly to the video bridge — so a clearnet-reachable UI with no public address on the media interface produces meetings that join and then carry no audio or video. The `jvb-public-address` health check detects exactly that combination and reports it; see [Health Checks](#health-checks).
 
 ## Installation and First-Run Flow
 
@@ -168,8 +168,8 @@ Four daemon checks, plus one standalone check for the bridge's public address.
 **`jvb-public-address` is where the media-address problem surfaces**, and it reports all three states rather than only the broken one:
 
 - **success** — a public IPv4 is published on the media interface, and that is what the bridge advertises.
-- **failure** — the web UI is publicly reachable while the media interface has no public IPv4: meetings connect and carry no media. The message names the interface to fix. While failing it polls every 5 seconds instead of 30, so it clears promptly once the address is enabled.
-- **disabled** — nothing is public. Nothing is broken; remote participants simply relay through Coturn. This is the ordinary state of a purely local or Tor-only setup.
+- **failure** — the web UI is reachable on clearnet while the media interface has no public IPv4: meetings connect and carry no media. The message names the interface to fix. While failing it polls every 5 seconds instead of 30, so it clears promptly once the address is enabled.
+- **disabled** — the web UI has no clearnet address. Direct bridge access is unavailable, and remote participants require a configured Coturn relay. This is the ordinary state of a purely local or Tor-only setup.
 
 Because STUN is disabled, a bridge with no published address advertises no public candidate at all rather than a wrong one — there is no silent middle state in which the bridge advertises an address StartOS never published.
 
