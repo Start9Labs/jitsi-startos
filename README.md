@@ -117,7 +117,9 @@ Two interfaces, and both matter for a call to work.
 | Web UI             | `ui`        | ui   | 8000  | The Jitsi Meet client      |
 | Video Bridge Media | `jvb-media` | api  | 10000 | The WebRTC media transport |
 
-**Exposing the web UI on clearnet is not enough.** Media does not flow through the web interface — it goes directly to the video bridge — so a clearnet-reachable UI with no public address on the media interface produces meetings that join and then carry no audio or video. The `jvb-public-address` health check detects exactly that combination and reports it; see [Health Checks](#health-checks).
+**Neither interface is sufficient alone.** The web interface serves the client and, because `BOSH_RELATIVE` is on, proxies all XMPP signaling at `/http-bind`; the media interface carries only WebRTC media. So a public media address with a LAN-only UI leaves remote guests unable to load the page or join the room at all, and a clearnet-reachable UI with no public address on the media interface produces meetings that join and then carry no audio or video. The `jvb-public-address` health check detects the second combination and reports it; see [Health Checks](#health-checks).
+
+The web interface needs a **public domain**, not a bare IP: browsers gate camera and microphone access on a secure context, and the domain is what StartOS terminates trusted TLS for on 443. The media interface needs a public IPv4, and its transport is **UDP only** — the package sets only `JVB_PORT`, and upstream's TCP fallback harvester is not enabled, so nothing listens on TCP 10000. StartOS's own port reachability check is a TCP connect, so it can report 10000 as closed while UDP media works.
 
 ## Installation and First-Run Flow
 
@@ -125,7 +127,7 @@ Install generates the two internal credentials and raises a `critical` task for 
 
 The ordering that matters is Coturn's: it should be installed **and given a public domain** before you rely on Jitsi for calls across networks, because that is what makes a relay available. Jitsi will start and work without it on a local network.
 
-If you intend to use Jitsi over the internet, enable a public IPv4 address on the **Video Bridge Media** interface as well as on the web UI.
+If you intend to use Jitsi over the internet, give the **Web UI** interface a clearnet public domain and enable a public IPv4 address on the **Video Bridge Media** interface. StartOS states the gateway rules each of those requires; the media rule has to cover UDP.
 
 ## Actions
 
@@ -185,7 +187,7 @@ The `main` volume is copied wholesale — `sdk.Backups.ofVolumes('main')`. No du
 ## Limitations and Differences
 
 1. **A password is required before the service will start.** Meeting creation is authenticated; joining is not.
-2. **Media needs its own public address.** Exposing only the web UI produces calls that connect and then carry nothing. The bridge never falls back to a STUN-discovered address, so without a published public IPv4 remote participants reach it only through Coturn.
+2. **Media needs its own public address, and so does the UI.** Exposing only the web UI produces calls that connect and then carry nothing — the bridge never falls back to a STUN-discovered address, so without a published public IPv4 remote participants reach it only through Coturn. Exposing only the media interface leaves remote guests unable to load the client or reach signaling, both of which come from the web interface. Media is **UDP only** — nothing listens on TCP 10000, and StartOS's TCP-based reachability check may therefore report it closed even when media works.
 3. **TURN is only advertised when Coturn has a public domain** and its secret is readable. Without it, calls work only where a direct connection is possible.
 4. **The XMPP websocket transport is disabled** and the client uses BOSH, because the websocket URL is always generated as an absolute address that would not be reachable.
 5. **TLS is terminated by StartOS**, so the web container serves plain HTTP.
