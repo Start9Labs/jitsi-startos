@@ -18,18 +18,23 @@ Freshly scaffolded? Work the
 guide page, not a file in this repo — read it, don't copy it in.
 
 Keep `README.md` (technical reference for an AI support or administering agent) and
-`instructions.md` (end-user docs) in sync with your changes.
+`instructions.md` (end-user docs) in sync with your changes. This file restates neither:
+whoever changes the package has both, so it carries only what they don't — repo mechanics,
+a change that looks right and is not, where the next thing gets added, a naming trap, a
+build or test invocation particular to this repo.
 
-**Bugs and feature requests are GitHub issues on this repo** — file them as you find them.
+**Fix a defect you spot rather than reporting it** — you have the package open and the
+context to be sure. File **a GitHub issue on this repo** only when the call isn't yours to
+make: you can't pin the cause down, two defensible fixes exist, or it's too large to ride on
+the work in hand. An open issue is a report, not a queue — implement one when you're asked
+to or when it's labelled `Approved`, then close it with `Closes #<n>`.
+
 Don't record work in the repo instead: no `TODO.md`, no `NOTES.md`, no `PLAN.md`. What you
 verified, tried, and decided belongs in the commit message and the PR body.
 
 ## This repo
 
-- **Prosody's accounts must stay on their own subpath at `/var/lib/prosody`.** Upstream generates prosody's live config under `/run` and treats `/config` as a read-only seed, so accounts written there do not survive a restart.
-- **Read Coturn's secret through the `shared` subpath only, read-only, in a throwaway container.** Never mount Coturn's volume root, and never mount it into a running daemon — a missing or broken Coturn must not be able to take prosody down.
-- **Don't add a health check to the Coturn dependency.** Coturn's own `coturn` check reports `disabled` until a public domain is attached, which would surface here as a permanent unmet-dependency warning even though Jitsi degrades gracefully to relay-less operation. Coturn's own checks prompt the user.
-- **`ENABLE_XMPP_WEBSOCKET` stays off and `BOSH_RELATIVE` stays on.** There is no relative form for the websocket URL — it is always generated as an absolute `wss://localhost:8443`, which no client can reach across `.local`, clearnet, and Tor. BOSH's relative URL works from every origin.
-- **`JVB_ADVERTISE_IPS` comes from the published interface, not from STUN — and `JVB_DISABLE_STUN` is what enforces it.** Upstream's `jvb.conf` keeps ice4j's STUN mapping harvester on by default and adds its result _alongside_ `JVB_ADVERTISE_IPS`, so leaving it on means the bridge advertises whatever the box's default route exits from (a VPN exit, an upstream NAT) beside the published address — and, when no public IPv4 is published, instead of it. With STUN off, no published address means no public candidate, which the `jvb-public-address` check reports as `disabled` when the UI has no clearnet address. `JVB_ADVERTISE_PRIVATE_CANDIDATES` stays off too — bridge-internal 10.x and IPv6 ULA candidates are unroutable for clients and can stall ICE/DTLS when offered as high-priority pairs.
-- **Exposure state that feeds only a health check is watched, not `.const()`-read.** `jvbPublicIps` is read with `.const()` because it composes JVB's env; whether the UI is public on clearnet is read with `.onChange` because it does not. A `.const()` read of it would restart every daemon each time an address is toggled.
-- **The password action renders a throwaway prosody config from the same templates.** The running container's config lives under `/run` and cannot be reached from a separate container, so `prosodyctl register` needs its own rendered copy pointed at the accounts on the storage volume.
+- **Keep Prosody's accounts on their own subpath at `/var/lib/prosody`.** Accounts written under `/config` are lost on the next restart.
+- **Reach Coturn only through a read-only mount of its `shared` subpath in a throwaway container, and gate on none of its health checks.** A missing or unconfigured Coturn must neither stop prosody nor show Jitsi a permanently unmet dependency.
+- **Don't re-enable the XMPP websocket (`ENABLE_XMPP_WEBSOCKET`), private candidates (`JVB_ADVERTISE_PRIVATE_CANDIDATES`) or STUN (`JVB_DISABLE_STUN`).** Each breaks calls in a way README's environment table describes.
+- **Read exposure that feeds only a health check with `.onChange`, not `.const()`.** A `.const()` read restarts every daemon each time an address is toggled.

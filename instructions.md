@@ -35,4 +35,4 @@ The **Video Bridge Address** health check tells you which of these states you're
 
 ### Actions
 
-- **Reset Admin Password** — generate a new admin password (shown once). Use it to rotate the password or recover if you've lost it.
+- **Reset Admin Password** — generate a new admin password (shown once). Use it to rotate the password or recover if you've lost it. It asks for confirmation first, because the current password stops working.

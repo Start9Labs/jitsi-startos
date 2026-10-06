@@ -20,7 +20,6 @@ export default {
     18: 'Medios del puente de video',
     19: 'Transporte de medios WebRTC para video y audio',
     27: 'Crea una contrasena de administrador para que solo tu puedas iniciar reuniones.',
-    40: 'Generando la configuracion XMPP',
     28: 'Restablecer contrasena de administrador',
     29: 'Crear contrasena de administrador',
     30: 'Restablecer la contrasena de administrador para crear reuniones',
@@ -33,6 +32,7 @@ export default {
     42: 'El puente de video anuncia su direccion IPv4 publica publicada.',
     38: 'Necesario para clearnet. Habilite una direccion IPv4 publica en la interfaz "Video Bridge Media".',
     43: 'No hay IPv4 publica publicada. Los participantes remotos requieren un rele Coturn configurado.',
+    44: 'La contrasena de administrador actual deja de funcionar y se reemplaza por una nueva generada.',
   },
   de_DE: {
     0: 'Starte Jitsi Meet!',
@@ -53,7 +53,6 @@ export default {
     18: 'Video-Bridge-Medien',
     19: 'WebRTC-Medientransport fur Video und Audio',
     27: 'Erstellen Sie ein Administratorpasswort damit nur Sie Meetings starten konnen.',
-    40: 'XMPP-Konfiguration wird generiert',
     28: 'Administratorpasswort zurucksetzen',
     29: 'Administratorpasswort erstellen',
     30: 'Administratorpasswort zum Erstellen von Meetings zurucksetzen',
@@ -66,6 +65,7 @@ export default {
     42: 'Die Videobridge kundigt ihre veroffentlichte offentliche IPv4-Adresse an.',
     38: 'Erforderlich fur Clearnet. Aktivieren Sie eine offentliche IPv4-Adresse in der "Video Bridge Media"-Schnittstelle.',
     43: 'Keine offentliche IPv4 veroffentlicht. Entfernte Teilnehmer benotigen ein konfiguriertes Coturn-Relay.',
+    44: 'Das aktuelle Administratorpasswort funktioniert nicht mehr und wird durch ein neu generiertes ersetzt.',
   },
   pl_PL: {
     0: 'Uruchamianie Jitsi Meet!',
@@ -86,7 +86,6 @@ export default {
     18: 'Media mostu wideo',
     19: 'Transport mediow WebRTC dla wideo i audio',
     27: 'Utworz haslo administratora aby tylko Ty mogl rozpoczynac spotkania.',
-    40: 'Generowanie konfiguracji XMPP',
     28: 'Zresetuj haslo administratora',
     29: 'Utworz haslo administratora',
     30: 'Zresetuj haslo administratora do tworzenia spotkan',
@@ -99,6 +98,7 @@ export default {
     42: 'Most wideo rozglasza swoj opublikowany publiczny adres IPv4.',
     38: 'Wymagane dla clearnet. Wlacz publiczny adres IPv4 w interfejsie "Video Bridge Media".',
     43: 'Nie opublikowano publicznego adresu IPv4. Zdalni uczestnicy wymagaja skonfigurowanego przekaznika Coturn.',
+    44: 'Obecne haslo administratora przestanie dzialac i zostanie zastapione nowo wygenerowanym.',
   },
   fr_FR: {
     0: 'Demarrage de Jitsi Meet !',
@@ -119,7 +119,6 @@ export default {
     18: 'Medias du pont video',
     19: 'Transport de medias WebRTC pour la video et audio',
     27: 'Creez un mot de passe administrateur pour que vous seul puissiez demarrer des reunions.',
-    40: 'Generation de la configuration XMPP',
     28: 'Reinitialiser le mot de passe administrateur',
     29: 'Creer le mot de passe administrateur',
     30: 'Reinitialiser le mot de passe administrateur pour creer des reunions',
@@ -132,5 +131,6 @@ export default {
     42: 'Le pont video annonce son adresse IPv4 publique publiee.',
     38: 'Requis pour le clearnet. Activez une adresse IPv4 publique dans l\'interface "Video Bridge Media".',
     43: "Aucune IPv4 publique publiee. Les participants distants ont besoin d'un relais Coturn configure.",
+    44: 'Le mot de passe administrateur actuel cesse de fonctionner et est remplace par un nouveau mot de passe genere.',
   },
 } satisfies Record<string, LangDict>

@@ -1,7 +1,7 @@
 import { FileHelper, z } from '@start9labs/start-sdk'
 import { sdk } from '../sdk'
 
-const shape = z.object({
+const shape = z.looseObject({
   JICOFO_AUTH_PASSWORD: z.string(),
   JVB_AUTH_PASSWORD: z.string(),
 
