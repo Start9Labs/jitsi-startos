@@ -141,6 +141,7 @@ Sets the password for the `admin` account that is allowed to start meetings.
 - **How:** in a temporary container, rendering a throwaway prosody config from the same templates the running container uses — the live config is generated under `/run` and is not reachable from outside it.
 - **Cost:** seconds. Runnable running or stopped.
 - **Repeat safety:** safe to re-run; the registration overwrites the existing account, and each run generates a fresh password.
+- **Confirmation:** once a password exists, StartOS asks before running, since the current password stops working.
 - **Outputs:** the username `admin` and the new password, masked and copyable.
 
 Guests do not need this. It is required only to **start** a meeting; anyone with the link can join one already running.
