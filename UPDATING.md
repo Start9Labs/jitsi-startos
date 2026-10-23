@@ -4,13 +4,14 @@ Jitsi Meet ships as four coordinated upstream images, all pinned by `dockerTag` 
 
 ## Determining the upstream version
 
-- **Jitsi** — the four coordinated images (`ghcr.io/jitsi/web`, `ghcr.io/jitsi/prosody`, `ghcr.io/jitsi/jicofo`, `ghcr.io/jitsi/jvb`) are built and tagged together by [`jitsi/docker-jitsi-meet`](https://github.com/jitsi/docker-jitsi-meet). Each release is a `stable-<build>` tag (e.g. `stable-11146`) that all four images share. The current pin lives in `startos/manifest/index.ts` on the `web`, `prosody`, `jicofo`, and `jvb` image entries.
+- **Jitsi** — the four coordinated images (`ghcr.io/jitsi/web`, `ghcr.io/jitsi/prosody`, `ghcr.io/jitsi/jicofo`, `ghcr.io/jitsi/jvb`) are built and tagged together by [`jitsi/docker-jitsi-meet`](https://github.com/jitsi/docker-jitsi-meet). Each release is a `stable-<build>` or `stable-<build>-<patch>` tag that all four images share. The current pin lives in `startos/manifest/index.ts` on the `web`, `prosody`, `jicofo`, and `jvb` image entries.
 
   ```bash
-  gh release view -R jitsi/docker-jitsi-meet --json tagName -q .tagName
-  # or, to see recent builds:
-  gh release list -R jitsi/docker-jitsi-meet
+  gh api --paginate 'repos/jitsi/docker-jitsi-meet/tags?per_page=100' \
+    --jq '.[].name' | grep -E '^stable-[0-9]+(-[0-9]+)?$' | sort -V -r
   ```
+
+  Upstream uses build numbers, not SemVer. Preserve a stable patch counter as an extra numeric component: `stable-<build>` maps to `2.0.<build>:0`, and `stable-<build>-<patch>` maps to `2.0.<build>.<patch>:0` (for example, `stable-11248-1` → `2.0.11248.1:0`). The suffix is a stable release, not an upstream prerelease or a StartOS wrapper revision. Keep the exact tag spelling in all four image pins. Classify review scope from the release notes; if compatibility is unclear, use the major/breaking-change scope.
 
   Upstream publishes to **GHCR**. It moved there during `stable-11146`; Docker Hub (`docker.io/jitsi/*`) stopped receiving `stable-*` tags at `stable-11031`, so pin `ghcr.io/jitsi/*`. GHCR's paginated tag list does not surface `stable-*` tags, so confirm a tag by fetching its manifest directly rather than listing:
 
@@ -25,7 +26,7 @@ Jitsi Meet ships as four coordinated upstream images, all pinned by `dockerTag` 
 
 ## Applying the bump
 
-Find the latest `stable-<build>` tag published by [docker-jitsi-meet](https://github.com/jitsi/docker-jitsi-meet) (e.g. `stable-11146`). All four Jitsi images share that build number and must be bumped together:
+Find the latest stable tag published by [docker-jitsi-meet](https://github.com/jitsi/docker-jitsi-meet), including any numeric patch suffix (e.g. `stable-11248-1`). Use the complete tag in place of `stable-<build>` below. All four Jitsi images share that build number and must be bumped together:
 
 - `ghcr.io/jitsi/web:stable-<build>`
 - `ghcr.io/jitsi/prosody:stable-<build>`
