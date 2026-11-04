@@ -3,12 +3,12 @@ import { sdk } from '../sdk'
 import { getPassword } from '../utils'
 
 export const seedFiles = sdk.setupOnInit(async (effects, kind) => {
-  if (kind === 'install') {
-    await storeJson.merge(effects, {
+  const store = await storeJson.read().once()
+  await storeJson.merge(effects, {
+    ...(kind === 'install' && {
       JICOFO_AUTH_PASSWORD: getPassword(),
       JVB_AUTH_PASSWORD: getPassword(),
-    })
-  } else {
-    await storeJson.merge(effects, {})
-  }
+    }),
+    ...(!store?.TURN_SECRET && { TURN_SECRET: getPassword() }),
+  })
 })

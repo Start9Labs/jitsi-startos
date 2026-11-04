@@ -19,13 +19,22 @@ const dict = {
   'Video Bridge Address': 41,
   'The video bridge advertises its published public IPv4.': 42,
   'Required for clearnet. Enable a public IPv4 address in the "Video Bridge Media" interface.': 38,
-  'No public IPv4 published. Remote participants require a configured Coturn relay.': 43,
+  'No public IPv4 published. The video bridge is reachable only on your local network.': 43,
+
+  'TURN Relay': 45,
+  'The TURN relay is ready': 47,
+  'The TURN relay is not ready': 48,
+  'TURN Relay Address': 49,
+  'TURN and TURN over TLS are published on a public domain.': 50,
+  'Required for clearnet. Add a public domain to the "TURN Relay" interface and enable both of its addresses.': 51,
+  'The TURN relay has no public domain.': 52,
 
   // interfaces.ts
   'Web UI': 16,
   'The web interface of Jitsi Meet': 17,
   'Video Bridge Media': 18,
   'WebRTC media transport for video and audio': 19,
+  'Relays media for participants who cannot reach the video bridge directly': 46,
 
   // init
   'Create an admin password so only you can start meetings.': 27,

@@ -1,6 +1,6 @@
 # Updating the upstream version
 
-Jitsi Meet ships as four coordinated upstream images, all pinned by `dockerTag` in `startos/manifest/index.ts`. (The TURN server is no longer bundled — it lives in the separate [`coturn-startos`](https://github.com/Start9Labs/coturn-startos) package, which Jitsi depends on and which is versioned there.)
+Jitsi Meet ships as four coordinated upstream images plus Coturn's, all pinned by `dockerTag` in `startos/manifest/index.ts`. The Coturn image moves independently of Jitsi's; keep it on the tag [`coturn-startos`](https://github.com/Start9Labs/coturn-startos) pins.
 
 ## Determining the upstream version
 
@@ -39,4 +39,4 @@ Sort each of those into the right mechanism. **Ownership is a oneshot** — Star
 
 If a release changes which uid the containers run as, check the **upgrade** path, not just a fresh install: files an earlier release wrote are left owned by the old uid, and the entrypoints copy seed data with plain `cp` that fails silently on a permission error. Compare a populated volume against the new uid before shipping — `2.0.11146:0` hit exactly this, and the seed it left unreadable is repaired by the `2.0.11146:2` migration.
 
-If the Coturn dependency's minimum version needs to change, update `coturnVersionRange` in `startos/utils.ts`.
+A Coturn bump needs its own check: `renderTurnserverConf` in `startos/utils.ts` depends on how Coturn maps `external-ip` to `relay-ip` and orders `allowed-peer-ip` before `denied-peer-ip`, so read its changelog for either, and run a forced-relay call (`#config.forceTurnRelay=true`) before shipping.
