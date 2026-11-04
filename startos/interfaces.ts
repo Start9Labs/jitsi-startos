@@ -4,6 +4,10 @@ import {
   jvbMediaHostId,
   jvbMediaInterfaceId,
   jvbMediaPort,
+  turnHostId,
+  turnInterfaceId,
+  turnPort,
+  turnsPort,
   uiHostId,
   uiInterfaceId,
   uiPort,
@@ -51,5 +55,35 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
     }),
   ])
 
-  return [uiReceipt, jvbReceipt]
+  const turnOrigin = await sdk.MultiHost.of(effects, turnHostId).bindPort(
+    turnPort,
+    {
+      protocol: null,
+      preferredExternalPort: turnPort,
+      secure: { ssl: false },
+      addSsl: {
+        preferredExternalPort: turnsPort,
+        alpn: null,
+        addXForwardedHeaders: false,
+        auth: null,
+      },
+    },
+  )
+  const turnReceipt = await turnOrigin.export([
+    sdk.createInterface(effects, {
+      name: i18n('TURN Relay'),
+      id: turnInterfaceId,
+      description: i18n(
+        'Relays media for participants who cannot reach the video bridge directly',
+      ),
+      type: 'api',
+      masked: false,
+      schemeOverride: { ssl: 'turns', noSsl: 'turn' },
+      username: null,
+      path: '',
+      query: {},
+    }),
+  ])
+
+  return [uiReceipt, jvbReceipt, turnReceipt]
 })

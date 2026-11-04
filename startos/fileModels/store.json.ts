@@ -4,6 +4,7 @@ import { sdk } from '../sdk'
 const shape = z.looseObject({
   JICOFO_AUTH_PASSWORD: z.string(),
   JVB_AUTH_PASSWORD: z.string(),
+  TURN_SECRET: z.string().catch(''),
 
   ADMIN_PASSWORD: z.string().catch(''),
 })

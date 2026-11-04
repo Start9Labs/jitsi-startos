@@ -28,5 +28,9 @@ export const manifest = setupManifest({
       source: { dockerTag: 'ghcr.io/jitsi/jvb:stable-11248-3' },
       arch: ['x86_64', 'aarch64'],
     },
+    coturn: {
+      source: { dockerTag: 'coturn/coturn:4.18.0' },
+      arch: ['x86_64', 'aarch64'],
+    },
   },
 })

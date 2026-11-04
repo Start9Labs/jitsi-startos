@@ -13,17 +13,52 @@ export const jvbMediaHostId = 'jvb-media-multi'
 export const uiInterfaceId = 'ui'
 export const jvbMediaInterfaceId = 'jvb-media'
 
-// The external Coturn package Jitsi depends on for TURN/STUN relay.
-export const coturnId = 'coturn'
-export const coturnVersionRange = '>=4.14.0:0'
-export const coturnHostId = 'turn'
-export const coturnTurnInterfaceId = 'turn'
-// Coturn publishes its shared secret at `shared/turn-secret` on its `main`
-// volume. We mount only that subpath read-only (a directory bind — dependency
-// mounts are always directory mounts), so we never see the rest of Coturn's
-// volume (turnserver.conf, the coturn database).
-export const coturnMountpoint = '/mnt/coturn'
-export const coturnSecretPath = '/mnt/coturn/turn-secret'
+// Clear of standalone Coturn's 3478, so both packages can be installed.
+export const turnPort = 3479
+export const turnsPort = 443
+export const turnHostId = 'turn-multi'
+export const turnInterfaceId = 'turn'
+
+export const coturnDataDir = '/var/lib/coturn'
+export const coturnConfPath = `${coturnDataDir}/turnserver.conf`
+
+export const coturnMounts = sdk.Mounts.of().mountVolume({
+  volumeId: 'main',
+  subpath: 'coturn',
+  mountpoint: coturnDataDir,
+  readonly: false,
+})
+
+// Coturn rewrites a peer equal to its external-ip to its relay-ip, so relaying
+// to the bridge's public address lands on the bridge in this container. Every
+// other peer is denied.
+export function renderTurnserverConf(cfg: {
+  realm: string
+  externalIps: string[]
+  containerIp: string
+  secret: string
+}): string {
+  return (
+    [
+      `listening-port=${turnPort}`,
+      'no-tls',
+      'no-tcp-relay',
+      `relay-ip=${cfg.containerIp}`,
+      `realm=${cfg.realm}`,
+      `server-name=${cfg.realm}`,
+      'fingerprint',
+      'use-auth-secret',
+      `static-auth-secret=${cfg.secret}`,
+      'no-multicast-peers',
+      `allowed-peer-ip=${cfg.containerIp}`,
+      'denied-peer-ip=0.0.0.0-255.255.255.255',
+      'denied-peer-ip=::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff',
+      `pidfile=${coturnDataDir}/turnserver.pid`,
+      'log-file=stdout',
+      ...cfg.externalIps.map((ip) => `external-ip=${ip}/${cfg.containerIp}`),
+    ].join('\n') + '\n'
+  )
+}
 
 export function getPassword() {
   return utils.getDefaultString({
@@ -91,10 +126,7 @@ export const jvbMounts = sdk.Mounts.of().mountVolume({
 
 export const prosodyPort = 5280
 
-// The external Coturn endpoint, resolved from the Coturn package's interfaces
-// plus its shared secret (read from Coturn's volume). `null` when Coturn isn't
-// installed/running or has no public domain yet — Jitsi then runs without TURN.
-export type CoturnTurn = {
+export type Turn = {
   domain: string
   turnPort: number | null
   turnsPort: number | null
@@ -104,7 +136,7 @@ export type CoturnTurn = {
 export function prosodyEnv(opts: {
   JICOFO_AUTH_PASSWORD: string
   JVB_AUTH_PASSWORD: string
-  turn?: CoturnTurn | null
+  turn: Turn | null
 }) {
   const env: Record<string, string> = {
     TZ: 'UTC',
@@ -119,15 +151,11 @@ export function prosodyEnv(opts: {
   }
 
   // Prosody's mod_external_services advertises STUN/TURN to clients and mints
-  // time-limited REST-API credentials from TURN_CREDENTIALS (the Coturn secret).
+  // time-limited REST-API credentials from TURN_CREDENTIALS.
   const turn = opts.turn
   if (turn) {
     env.TURN_CREDENTIALS = turn.secret
-    // Coturn serves plain TURN on 3478 over both UDP and TCP; advertise both so
-    // clients prefer lower-latency UDP and fall back to TCP.
     env.TURN_TRANSPORT = 'udp,tcp'
-    // STUN reflexive discovery and plain TURN both use the plain UDP/TCP port;
-    // the turns: port (5349) is TLS-over-TCP only.
     if (turn.turnPort) {
       env.STUN_HOST = turn.domain
       env.STUN_PORT = String(turn.turnPort)

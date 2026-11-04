@@ -1,12 +1,11 @@
 import { storeJson } from './fileModels/store.json'
+import { turnserverConf } from './fileModels/turnserver.conf'
 import { i18n } from './i18n'
 import { sdk } from './sdk'
 import {
-  coturnHostId,
-  coturnId,
-  coturnMountpoint,
-  coturnSecretPath,
-  coturnTurnInterfaceId,
+  coturnConfPath,
+  coturnDataDir,
+  coturnMounts,
   jicofoHealthPort,
   jicofoMounts,
   jvbHttpPort,
@@ -19,6 +18,10 @@ import {
   prosodyPort,
   prosodyStorageMountpoint,
   prosodyUser,
+  renderTurnserverConf,
+  turnHostId,
+  turnInterfaceId,
+  turnPort,
   uiHostId,
   uiInterfaceId,
   uiPort,
@@ -33,7 +36,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
   if (!store) {
     throw new Error('store.json not found')
   }
-  const { JICOFO_AUTH_PASSWORD, JVB_AUTH_PASSWORD } = store
+  const { JICOFO_AUTH_PASSWORD, JVB_AUTH_PASSWORD, TURN_SECRET } = store
 
   // Resolve public IPs from the JVB media interface so JVB advertises
   // the correct addresses instead of the STUN-discovered one
@@ -68,23 +71,18 @@ export const main = sdk.setupMain(async ({ effects }) => {
     return { cancel: false }
   })
 
-  // Resolve the external Coturn package's public TURN endpoint. Coturn exposes a
-  // single `turn` interface whose public-domain address set carries both the
-  // plain turn: address (ssl:false, 3478) and the edge-terminated turns: address
-  // (ssl:true, 5349); pick each by its ssl flag, both on the same domain.
-  const coturnEndpoint = await sdk.host
-    .get(effects, { hostId: coturnHostId, packageId: coturnId }, (host) => {
+  const turnEndpoint = await sdk.host
+    .getOwn(effects, turnHostId, (host) => {
       const iface =
         host &&
         Object.values(host.bindings)
           .flatMap((b) => Object.values(b.interfaces))
-          .find((i) => i.id === coturnTurnInterfaceId)
-      const domains = iface
-        ? iface.addressInfo
-            .filter({ visibility: 'public', kind: 'domain' })
-            .hostnames.filter((h) => h.port != null)
-        : []
-      const domain = domains[0]?.hostname ?? null
+          .find((i) => i.id === turnInterfaceId)
+      const domains =
+        iface?.addressInfo
+          .filter({ visibility: 'public', kind: 'domain' })
+          .hostnames.filter((h) => h.port != null) ?? []
+      const domain = domains[0]?.hostname
       if (!domain) return null
       const forDomain = domains.filter((h) => h.hostname === domain)
       return {
@@ -95,37 +93,29 @@ export const main = sdk.setupMain(async ({ effects }) => {
     })
     .const()
 
-  // Read Coturn's shared TURN secret. Mount only the `shared` subpath read-only
-  // into a throwaway container, so a missing Coturn can never break the prosody
-  // daemon and we never touch the rest of Coturn's volume.
-  const coturnSecret = await readCoturnSecret()
-  async function readCoturnSecret(): Promise<string | null> {
-    const reader = sdk.SubContainer.of(
+  const turn =
+    turnEndpoint && TURN_SECRET
+      ? { ...turnEndpoint, secret: TURN_SECRET }
+      : null
+
+  if (turn) {
+    await turnserverConf.write(
       effects,
-      { imageId: 'prosody' },
-      sdk.Mounts.of().mountDependency({
-        dependencyId: coturnId,
-        volumeId: 'main',
-        subpath: 'shared',
-        mountpoint: coturnMountpoint,
-        readonly: true,
+      renderTurnserverConf({
+        realm: turn.domain,
+        externalIps: jvbPublicIps ?? [],
+        containerIp: await sdk.getContainerIp(effects).const(),
+        secret: turn.secret,
       }),
-      'coturn-secret-read',
     )
-    try {
-      const { stdout } = await reader.execFail(['cat', coturnSecretPath])
-      return stdout.toString().trim() || null
-    } catch {
-      return null
-    } finally {
-      await reader.destroy().catch(() => {})
-    }
   }
 
-  const turn =
-    coturnEndpoint && coturnSecret
-      ? { ...coturnEndpoint, secret: coturnSecret }
-      : null
+  const coturnSub = sdk.SubContainer.of(
+    effects,
+    { imageId: 'coturn' },
+    coturnMounts,
+    'coturn-sub',
+  )
 
   const commonEnv = {
     TZ: 'UTC',
@@ -289,8 +279,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
           // its reflexive address is offered alongside JVB_ADVERTISE_IPS, and
           // in place of it whenever no public IPv4 is published. Without a
           // published address the bridge now offers no public candidate at
-          // all and remote participants need a configured Coturn relay, which the
-          // `jvb-public-address` check below reports.
+          // all, which the `jvb-public-address` check below reports.
           JVB_DISABLE_STUN: 'true',
           ...(jvbPublicIps?.length
             ? { JVB_ADVERTISE_IPS: jvbPublicIps.join(',') }
@@ -332,10 +321,71 @@ export const main = sdk.setupMain(async ({ effects }) => {
               : {
                   result: 'disabled' as const,
                   message: i18n(
-                    'No public IPv4 published. Remote participants require a configured Coturn relay.',
+                    'No public IPv4 published. The video bridge is reachable only on your local network.',
                   ),
                 },
       },
       requires: ['jvb'],
+    })
+    .addOneshot('coturn-chown', () =>
+      turn
+        ? {
+            subcontainer: coturnSub,
+            exec: {
+              command: ['chown', '-R', 'nobody:nogroup', coturnDataDir],
+              user: 'root',
+            },
+            requires: [],
+          }
+        : null,
+    )
+    .addDaemon('coturn', () =>
+      turn
+        ? {
+            subcontainer: coturnSub,
+            exec: {
+              command: ['turnserver', '-c', coturnConfPath],
+              user: 'nobody',
+            },
+            ready: {
+              display: i18n('TURN Relay'),
+              fn: () =>
+                sdk.healthCheck.checkPortListening(effects, turnPort, {
+                  successMessage: i18n('The TURN relay is ready'),
+                  errorMessage: i18n('The TURN relay is not ready'),
+                }),
+            },
+            requires: ['coturn-chown'],
+          }
+        : null,
+    )
+    .addHealthCheck('turn-address', {
+      ready: {
+        display: i18n('TURN Relay Address'),
+        trigger: sdk.trigger.statusTrigger(30_000, {
+          starting: 5_000,
+          failure: 5_000,
+        }),
+        fn: () =>
+          turn?.turnPort && turn.turnsPort
+            ? {
+                result: 'success' as const,
+                message: i18n(
+                  'TURN and TURN over TLS are published on a public domain.',
+                ),
+              }
+            : uiIsClearnetPublic
+              ? {
+                  result: 'failure' as const,
+                  message: i18n(
+                    'Required for clearnet. Add a public domain to the "TURN Relay" interface and enable both of its addresses.',
+                  ),
+                }
+              : {
+                  result: 'disabled' as const,
+                  message: i18n('The TURN relay has no public domain.'),
+                },
+      },
+      requires: [],
     })
 })
