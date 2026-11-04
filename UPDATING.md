@@ -1,6 +1,6 @@
 # Updating the upstream version
 
-Jitsi Meet ships as four coordinated upstream images, all pinned by `dockerTag` in `startos/manifest/index.ts`. (The TURN server is no longer bundled — it lives in the separate [`coturn-startos`](https://github.com/Start9Labs/coturn-startos) package, which Jitsi depends on and which is versioned there.)
+Jitsi Meet ships as four coordinated upstream images, all pinned by `dockerTag` in `startos/manifest/index.ts`. The TURN server is the separate [`coturn-startos`](https://github.com/Start9Labs/coturn-startos) dependency, versioned there.
 
 ## Determining the upstream version
 
@@ -11,9 +11,9 @@ Jitsi Meet ships as four coordinated upstream images, all pinned by `dockerTag` 
     --jq '.[].name' | grep -E '^stable-[0-9]+(-[0-9]+)?$' | sort -V -r
   ```
 
-  Upstream uses build numbers, not SemVer. Preserve a stable patch counter as an extra numeric component: `stable-<build>` maps to `2.0.<build>:0`, and `stable-<build>-<patch>` maps to `2.0.<build>.<patch>:0` (for example, `stable-11248-1` → `2.0.11248.1:0`). The suffix is a stable release, not an upstream prerelease or a StartOS wrapper revision. Keep the exact tag spelling in all four image pins. Classify review scope from the release notes; if compatibility is unclear, use the major/breaking-change scope.
+  Upstream uses build numbers, not SemVer. Preserve a stable patch counter as an extra numeric component: `stable-<build>` maps to `2.0.<build>:0`, and `stable-<build>-<patch>` maps to `2.0.<build>.<patch>:0` (for example, `stable-11248-1` → `2.0.11248.1:0`). The suffix is a stable release, not an upstream prerelease or a StartOS wrapper revision. Keep the exact tag spelling in all four image pins.
 
-  Upstream publishes to **GHCR**. It moved there during `stable-11146`; Docker Hub (`docker.io/jitsi/*`) stopped receiving `stable-*` tags at `stable-11031`, so pin `ghcr.io/jitsi/*`. GHCR's paginated tag list does not surface `stable-*` tags, so confirm a tag by fetching its manifest directly rather than listing:
+  Pin `ghcr.io/jitsi/*`: Docker Hub (`docker.io/jitsi/*`) no longer receives `stable-*` tags. GHCR's paginated tag list does not surface `stable-*` tags, so confirm a tag by fetching its manifest directly rather than listing:
 
   ```bash
   TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:jitsi/web:pull&service=ghcr.io" | jq -r .token)
@@ -35,8 +35,6 @@ Find the latest stable tag published by [docker-jitsi-meet](https://github.com/j
 
 Read the upstream release notes for changes to the container contract, not just to Jitsi itself — the images run unprivileged (uid 1000) and each treats `/config` as a read-only seed. A release that adds a directory the containers must write to needs a matching mount plus a `chown` oneshot in `startos/main.ts`, and a port change in `web/rootfs/defaults/default` needs `uiPort` in `startos/utils.ts` updated to match.
 
-Sort each of those into the right mechanism. **Ownership is a oneshot** — StartOS mounts volumes root-owned on every start, so `chown` has to run every time. **A relocation of existing data is `migrations.up` in `startos/versions/current.ts`** — it runs once, off the stored data version, so it also covers a restore from an older backup and never touches a fresh install. `stable-11146-2` moving `data_path` to `/var/lib/prosody/data` was the second kind. Adding a migration means the _next_ bump spins this version off into `startos/versions/v2.0.11146_2.ts` and lists it in `other`, rather than editing `current.ts` in place.
-
-If a release changes which uid the containers run as, check the **upgrade** path, not just a fresh install: files an earlier release wrote are left owned by the old uid, and the entrypoints copy seed data with plain `cp` that fails silently on a permission error. Compare a populated volume against the new uid before shipping — `2.0.11146:0` hit exactly this, and the seed it left unreadable is repaired by the `2.0.11146:2` migration.
+If a release changes which uid the containers run as, files an earlier release wrote stay owned by the old uid, and the entrypoints copy seed data with plain `cp` that fails silently on a permission error.
 
 If the Coturn dependency's minimum version needs to change, update `coturnVersionRange` in `startos/utils.ts`.
