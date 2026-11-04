@@ -35,13 +35,13 @@
 
 ## Image and Container Runtime
 
-Four upstream images, unmodified, each run as its container's init process.
+Five unmodified upstream images. The four Jitsi images run their entrypoints as init; Coturn runs `turnserver` directly.
 
 | Property      | Value                                                                                                      |
 | ------------- | ---------------------------------------------------------------------------------------------------------- |
 | Images        | `ghcr.io/jitsi/web`, `ghcr.io/jitsi/prosody`, `ghcr.io/jitsi/jicofo`, `ghcr.io/jitsi/jvb`, `coturn/coturn` |
 | Architectures | x86_64, aarch64                                                                                            |
-| Entrypoint    | Each image's own, run as init                                                                              |
+| Entrypoint    | Jitsi: each image's own, run as init. Coturn: `turnserver -c /var/lib/coturn/turnserver.conf`              |
 
 | Subcontainer  | Purpose                                                                                      |
 | ------------- | -------------------------------------------------------------------------------------------- |
@@ -117,6 +117,8 @@ Three interfaces. The first two are what a call needs; the third is the fallback
 The web interface needs a **public domain**, not a bare IP: a public IPv4 on it is still served over HTTPS, but under the StartOS root CA, so every guest lands on a certificate warning; the domain is what StartOS terminates trusted TLS for on 443. The media interface needs a public IPv4, and its transport is **UDP only** — JVB's ICE/TCP is off by default and the image exposes no switch for it, so nothing listens on TCP 10000. StartOS's own port reachability check is a TCP connect, so it can report 10000 as closed while UDP media works.
 
 **The TURN relay can relay only to the bridge.** Coturn rewrites a relay peer equal to its `external-ip` — the bridge's published IPv4 — to its own `relay-ip`, the container address the bridge shares, and every other peer is denied (`allowed-peer-ip` is that address alone). So relayed media never leaves the box, and the relay needs no port range of its own: only its listening port is published. Two relay-only participants in a 1:1 call can still go peer-to-peer, relay to relay, since each relay candidate carries that same public address.
+
+Only UDP peer allocations are enabled (`no-tcp-relay`); TCP peer allocations would also expose the container's internal TCP services. Clients can still connect to TURN over UDP, TCP, or TLS.
 
 The TURN Relay interface needs its **own public domain**, since StartOS will not serve one domain on two hosts. It serves plain TURN on UDP and TCP at 3479, and TURN over TLS that StartOS terminates at the domain on 443 — the same port, and the same certificate authority, as any HTTPS domain on the server — before forwarding plaintext to Coturn.
 

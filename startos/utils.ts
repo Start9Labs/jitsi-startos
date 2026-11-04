@@ -42,6 +42,7 @@ export function renderTurnserverConf(cfg: {
     [
       `listening-port=${turnPort}`,
       'no-tls',
+      'no-tcp-relay',
       `relay-ip=${cfg.containerIp}`,
       `realm=${cfg.realm}`,
       `server-name=${cfg.realm}`,
@@ -54,7 +55,7 @@ export function renderTurnserverConf(cfg: {
       'denied-peer-ip=::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff',
       `pidfile=${coturnDataDir}/turnserver.pid`,
       'log-file=stdout',
-      ...cfg.externalIps.map((ip) => `external-ip=${ip}`),
+      ...cfg.externalIps.map((ip) => `external-ip=${ip}/${cfg.containerIp}`),
     ].join('\n') + '\n'
   )
 }
