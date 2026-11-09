@@ -1,18 +1,18 @@
 import { VersionInfo, IMPOSSIBLE } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '2.0.11248.3:1',
+  version: '2.0.11248.3:2',
   releaseNotes: {
     en_US:
-      'Jitsi Meet now includes its own TURN relay and no longer needs the Coturn package. To let participants on restrictive networks join, add a public domain to the new TURN Relay interface.',
+      "Participants on IPv6 can now send audio and video straight to the video bridge over the server's public IPv6 address.",
     es_ES:
-      'Jitsi Meet ahora incluye su propio relé TURN y ya no necesita el paquete Coturn. Para que puedan unirse participantes en redes restrictivas, agrega un dominio público a la nueva interfaz TURN Relay.',
+      'Los participantes con IPv6 ahora pueden enviar audio y vídeo directamente al puente de vídeo a través de la dirección IPv6 pública del servidor.',
     de_DE:
-      'Jitsi Meet enthält jetzt ein eigenes TURN-Relay und benötigt das Coturn-Paket nicht mehr. Damit Teilnehmer in restriktiven Netzwerken beitreten können, fügen Sie der neuen Schnittstelle TURN Relay eine öffentliche Domain hinzu.',
+      'Teilnehmer mit IPv6 können Audio und Video jetzt direkt über die öffentliche IPv6-Adresse des Servers an die Videobrücke senden.',
     pl_PL:
-      'Jitsi Meet ma teraz własny przekaźnik TURN i nie potrzebuje już pakietu Coturn. Aby uczestnicy w restrykcyjnych sieciach mogli dołączyć, dodaj domenę publiczną do nowego interfejsu TURN Relay.',
+      'Uczestnicy korzystający z IPv6 mogą teraz przesyłać dźwięk i obraz bezpośrednio do mostka wideo przez publiczny adres IPv6 serwera.',
     fr_FR:
-      'Jitsi Meet inclut désormais son propre relais TURN et n’a plus besoin du paquet Coturn. Pour que les participants sur des réseaux restrictifs puissent rejoindre, ajoutez un domaine public à la nouvelle interface TURN Relay.',
+      'Les participants en IPv6 peuvent désormais envoyer l’audio et la vidéo directement au pont vidéo via l’adresse IPv6 publique du serveur.',
   },
   migrations: {
     up: async () => {},

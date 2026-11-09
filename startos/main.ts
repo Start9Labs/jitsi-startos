@@ -40,19 +40,27 @@ export const main = sdk.setupMain(async ({ effects }) => {
 
   // Resolve public IPs from the JVB media interface so JVB advertises
   // the correct addresses instead of the STUN-discovered one
-  const jvbPublicIps = await sdk.host
+  const jvbPublic = await sdk.host
     .getOwn(effects, jvbMediaHostId, (host) => {
       const iface =
         host &&
         Object.values(host.bindings)
           .flatMap((b) => Object.values(b.interfaces))
           .find((i) => i.id === jvbMediaInterfaceId)
-      return iface?.addressInfo
-        .filter({ visibility: 'public', kind: 'ipv4' })
-        .format('hostname-info')
-        .map((h) => h.hostname)
+      const hostnames = (kind: 'ipv4' | 'ipv6') =>
+        iface?.addressInfo
+          .filter({ visibility: 'public', kind })
+          .format('hostname-info')
+          .map((h) => h.hostname) ?? []
+      return {
+        ipv4: hostnames('ipv4'),
+        // Global unicast only (2000::/3); StartOS forwards no other v6 to the container.
+        ipv6: hostnames('ipv6').filter((h) => /^[23]/.test(h)),
+      }
     })
     .const()
+  const jvbPublicIps = jvbPublic.ipv4
+  const jvbAdvertiseIps = [...jvbPublic.ipv4, ...jvbPublic.ipv6]
 
   const uiClearnetExposure = sdk.host.getOwn(effects, uiHostId, (host) => {
     const iface =
@@ -281,8 +289,8 @@ export const main = sdk.setupMain(async ({ effects }) => {
           // published address the bridge now offers no public candidate at
           // all, which the `jvb-public-address` check below reports.
           JVB_DISABLE_STUN: 'true',
-          ...(jvbPublicIps?.length
-            ? { JVB_ADVERTISE_IPS: jvbPublicIps.join(',') }
+          ...(jvbAdvertiseIps.length
+            ? { JVB_ADVERTISE_IPS: jvbAdvertiseIps.join(',') }
             : {}),
         },
       },

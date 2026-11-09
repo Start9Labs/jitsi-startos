@@ -86,17 +86,17 @@ The internal credentials are generated once and never shown — nothing asks for
 
 **No configuration file reaches the Jitsi components** — the relay's `turnserver.conf` is the one file this package renders. Every Jitsi component is configured by environment, composed on each start, and that is where this package's overrides live:
 
-| Variable                           | Value                      | Why it differs from upstream's compose deployment                                                                                                                                        |
-| ---------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ENABLE_AUTH`, `AUTH_TYPE`         | on, internal               | Only an authenticated user can start a meeting                                                                                                                                           |
-| `ENABLE_GUESTS`                    | on                         | Anyone with the link can join one that has started                                                                                                                                       |
-| `DISABLE_HTTPS`                    | on                         | StartOS terminates TLS at the edge                                                                                                                                                       |
-| `BOSH_RELATIVE`                    | on                         | A relative BOSH URL works from any address — `.local`, clearnet, or Tor — without the client knowing the public hostname                                                                 |
-| `ENABLE_XMPP_WEBSOCKET`            | off                        | The websocket URL has no relative form and would be generated as an unreachable absolute address; disabling it makes the client use BOSH                                                 |
-| `JVB_ADVERTISE_PRIVATE_CANDIDATES` | off                        | Bridge-internal addresses are unroutable for clients and can stall connection setup if offered                                                                                           |
-| `JVB_ADVERTISE_IPS`                | the published public IPv4s | The bridge advertises the addresses StartOS publishes, and only those                                                                                                                    |
-| `JVB_DISABLE_STUN`                 | on                         | Upstream's STUN mapping harvester is additive and would advertise whatever the box's default route exits from — a VPN exit, an upstream NAT — beside or instead of the published address |
-| `TURN_*`, `STUN_*`, `TURNS_*`      | the TURN Relay interface   | Set only when the TURN Relay interface has an enabled public domain                                                                                                                      |
+| Variable                           | Value                                       | Why it differs from upstream's compose deployment                                                                                                                                        |
+| ---------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ENABLE_AUTH`, `AUTH_TYPE`         | on, internal                                | Only an authenticated user can start a meeting                                                                                                                                           |
+| `ENABLE_GUESTS`                    | on                                          | Anyone with the link can join one that has started                                                                                                                                       |
+| `DISABLE_HTTPS`                    | on                                          | StartOS terminates TLS at the edge                                                                                                                                                       |
+| `BOSH_RELATIVE`                    | on                                          | A relative BOSH URL works from any address — `.local`, clearnet, or Tor — without the client knowing the public hostname                                                                 |
+| `ENABLE_XMPP_WEBSOCKET`            | off                                         | The websocket URL has no relative form and would be generated as an unreachable absolute address; disabling it makes the client use BOSH                                                 |
+| `JVB_ADVERTISE_PRIVATE_CANDIDATES` | off                                         | Bridge-internal addresses are unroutable for clients and can stall connection setup if offered                                                                                           |
+| `JVB_ADVERTISE_IPS`                | the published public IPv4s and global IPv6s | The bridge advertises the addresses StartOS publishes, and only those                                                                                                                    |
+| `JVB_DISABLE_STUN`                 | on                                          | Upstream's STUN mapping harvester is additive and would advertise whatever the box's default route exits from — a VPN exit, an upstream NAT — beside or instead of the published address |
+| `TURN_*`, `STUN_*`, `TURNS_*`      | the TURN Relay interface                    | Set only when the TURN Relay interface has an enabled public domain                                                                                                                      |
 
 ## Dependencies
 
@@ -239,7 +239,7 @@ startos_managed_env_vars:
   - COLIBRI_REST_ENABLED
   - JVB_ADVERTISE_PRIVATE_CANDIDATES
   - JVB_DISABLE_STUN
-  - JVB_ADVERTISE_IPS # when a public IPv4 is published
+  - JVB_ADVERTISE_IPS # when a public IPv4 or global IPv6 is published
   - DISABLE_HTTPS
   - BOSH_RELATIVE
   - ENABLE_XMPP_WEBSOCKET
