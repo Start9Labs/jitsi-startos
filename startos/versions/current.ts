@@ -1,18 +1,68 @@
 import { VersionInfo, IMPOSSIBLE } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '2.0.11248.3:2',
+  version: '2.0.11509:0',
   releaseNotes: {
-    en_US:
-      "Participants on IPv6 can now send audio and video straight to the video bridge over the server's public IPv6 address.",
-    es_ES:
-      'Los participantes con IPv6 ahora pueden enviar audio y vídeo directamente al puente de vídeo a través de la dirección IPv6 pública del servidor.',
-    de_DE:
-      'Teilnehmer mit IPv6 können Audio und Video jetzt direkt über die öffentliche IPv6-Adresse des Servers an die Videobrücke senden.',
-    pl_PL:
-      'Uczestnicy korzystający z IPv6 mogą teraz przesyłać dźwięk i obraz bezpośrednio do mostka wideo przez publiczny adres IPv6 serwera.',
-    fr_FR:
-      'Les participants en IPv6 peuvent désormais envoyer l’audio et la vidéo directement au pont vidéo via l’adresse IPv6 publique du serveur.',
+    en_US: `Updated Jitsi Meet to stable-11509.
+
+**Features**
+- Moderators can close polls, and polls can be limited to a single answer
+- Moderators can restrict breakout rooms to the participants they assign, and video sharing to participants with permission
+- Participants are notified when their media connection has problems
+- A new Experimental settings tab with a Picture-in-Picture switch, and the app remembers the language and settings chosen in the browser
+
+**Fixes**
+- Numerous fixes to chat, tracks and the participants pane
+
+[Full release notes](https://github.com/jitsi/jitsi-meet-release-notes/blob/master/CHANGELOG-WEB.md)`,
+    es_ES: `Jitsi Meet actualizado a stable-11509.
+
+**Novedades**
+- Los moderadores pueden cerrar encuestas, y las encuestas pueden limitarse a una sola respuesta
+- Los moderadores pueden restringir las salas de grupos a los participantes que asignen, y el uso compartido de vídeo a los participantes con permiso
+- Los participantes reciben un aviso cuando su conexión multimedia tiene problemas
+- Nueva pestaña de ajustes experimentales con un interruptor de imagen en imagen, y la aplicación recuerda el idioma y los ajustes elegidos en el navegador
+
+**Correcciones**
+- Numerosas correcciones en el chat, las pistas y el panel de participantes
+
+[Notas de la versión completas](https://github.com/jitsi/jitsi-meet-release-notes/blob/master/CHANGELOG-WEB.md)`,
+    de_DE: `Jitsi Meet auf stable-11509 aktualisiert.
+
+**Neuerungen**
+- Moderatoren können Umfragen schließen, und Umfragen lassen sich auf eine einzige Antwort beschränken
+- Moderatoren können Breakout-Räume auf die von ihnen zugewiesenen Teilnehmer und das Teilen von Videos auf berechtigte Teilnehmer beschränken
+- Teilnehmer werden benachrichtigt, wenn ihre Medienverbindung Probleme hat
+- Ein neuer Einstellungs-Tab „Experimentell“ mit einem Bild-im-Bild-Schalter, und die App merkt sich die im Browser gewählte Sprache und Einstellungen
+
+**Fehlerbehebungen**
+- Zahlreiche Korrekturen an Chat, Medienspuren und Teilnehmerbereich
+
+[Vollständige Versionshinweise](https://github.com/jitsi/jitsi-meet-release-notes/blob/master/CHANGELOG-WEB.md)`,
+    pl_PL: `Zaktualizowano Jitsi Meet do stable-11509.
+
+**Nowości**
+- Moderatorzy mogą zamykać ankiety, a ankiety można ograniczyć do jednej odpowiedzi
+- Moderatorzy mogą ograniczyć pokoje podgrup do przydzielonych przez siebie uczestników, a udostępnianie wideo do uczestników z uprawnieniem
+- Uczestnicy są powiadamiani o problemach z połączeniem multimedialnym
+- Nowa karta ustawień eksperymentalnych z przełącznikiem obrazu w obrazie, a aplikacja zapamiętuje język i ustawienia wybrane w przeglądarce
+
+**Poprawki**
+- Liczne poprawki czatu, ścieżek multimedialnych i panelu uczestników
+
+[Pełne informacje o wydaniu](https://github.com/jitsi/jitsi-meet-release-notes/blob/master/CHANGELOG-WEB.md)`,
+    fr_FR: `Mise à jour de Jitsi Meet vers stable-11509.
+
+**Nouveautés**
+- Les modérateurs peuvent clôturer les sondages, et les sondages peuvent être limités à une seule réponse
+- Les modérateurs peuvent réserver les salles de sous-groupes aux participants qu’ils y affectent, et le partage de vidéo aux participants autorisés
+- Les participants sont avertis lorsque leur connexion média rencontre des problèmes
+- Un nouvel onglet de paramètres expérimentaux avec un interrupteur d’image dans l’image, et l’application mémorise la langue et les paramètres choisis dans le navigateur
+
+**Corrections**
+- Nombreuses corrections du chat, des pistes et du panneau des participants
+
+[Notes de version complètes](https://github.com/jitsi/jitsi-meet-release-notes/blob/master/CHANGELOG-WEB.md)`,
   },
   migrations: {
     up: async () => {},

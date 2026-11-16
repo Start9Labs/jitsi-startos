@@ -64,8 +64,6 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
       addSsl: {
         preferredExternalPort: turnsPort,
         alpn: null,
-        addXForwardedHeaders: false,
-        auth: null,
       },
     },
   )
