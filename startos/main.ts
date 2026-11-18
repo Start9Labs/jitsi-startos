@@ -130,6 +130,12 @@ export const main = sdk.setupMain(async ({ effects }) => {
     ...xmppConfig,
   }
 
+  // Mitigates CVE-2026-114938 (Java4Shell). The images' run scripts overwrite JAVA_SYS_PROPS.
+  const javaEnv = {
+    ...commonEnv,
+    JAVA_TOOL_OPTIONS: '-XX:-UseBASE64Intrinsics',
+  }
+
   const webSub = sdk.SubContainer.of(
     effects,
     { imageId: 'web' },
@@ -237,7 +243,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
         command: sdk.useEntrypoint(),
         runAsInit: true,
         env: {
-          ...commonEnv,
+          ...javaEnv,
           ENABLE_AUTH: '1',
           ENABLE_GUESTS: '1',
           JICOFO_AUTH_USER: 'focus',
@@ -269,7 +275,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
         command: sdk.useEntrypoint(),
         runAsInit: true,
         env: {
-          ...commonEnv,
+          ...javaEnv,
           JVB_AUTH_USER: 'jvb',
           JVB_AUTH_PASSWORD,
           JVB_PORT: String(jvbMediaPort),
