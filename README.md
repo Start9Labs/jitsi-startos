@@ -53,6 +53,8 @@ Five unmodified upstream images. The four Jitsi images run their entrypoints as 
 
 Startup is ordered: `prosody` first, then `web`, `jicofo`, and `jvb` alongside it. Oneshots run before their daemons — `nginx-patch` writes a longer proxy timeout so long-lived BOSH connections are not cut, and `prosody-chown` and `coturn-chown` hand their directories to the unprivileged user each image runs as, since StartOS mounts volumes root-owned. `coturn` and `coturn-chown` exist only while the TURN Relay interface has an enabled public domain.
 
+Jicofo and JVB inherit `JAVA_TOOL_OPTIONS=-XX:-UseBASE64Intrinsics` to mitigate CVE-2026-114938 (Java4Shell) on affected AVX-512 x86 processors. ARM is not affected by this CVE; no service-specific exploit has been established. Upstream-generated `JAVA_SYS_PROPS`, heap settings, authentication and network configuration are preserved.
+
 ## Volume and Data Layout
 
 One volume, subdivided per component. Each image reads its seed configuration from `/config` and treats it as read-only.
@@ -230,6 +232,7 @@ startos_managed_env_vars:
   - ENABLE_AUTH
   - ENABLE_GUESTS
   - AUTH_TYPE
+  - JAVA_TOOL_OPTIONS # Jicofo and JVB only; disables Base64 intrinsics
   - JICOFO_AUTH_USER
   - JICOFO_AUTH_PASSWORD
   - JVB_AUTH_USER

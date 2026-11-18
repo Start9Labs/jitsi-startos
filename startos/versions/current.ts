@@ -1,9 +1,11 @@
 import { VersionInfo, IMPOSSIBLE } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '2.0.11509:0',
+  version: '2.0.11509:1',
   releaseNotes: {
-    en_US: `Updated Jitsi Meet to stable-11509.
+    en_US: `Security: disable JVM Base64 intrinsics in both Jicofo and JVB to mitigate CVE-2026-114938 (Java4Shell) on affected AVX-512 x86 processors. ARM is not affected by this CVE. No service-specific exploit has been established.
+
+Updated Jitsi Meet to stable-11509.
 
 **Features**
 - Moderators can close polls, and polls can be limited to a single answer
@@ -15,7 +17,9 @@ export const current = VersionInfo.of({
 - Numerous fixes to chat, tracks and the participants pane
 
 [Full release notes](https://github.com/jitsi/jitsi-meet-release-notes/blob/master/CHANGELOG-WEB.md)`,
-    es_ES: `Jitsi Meet actualizado a stable-11509.
+    es_ES: `Seguridad: se desactivan los intrínsecos Base64 de la JVM en Jicofo y JVB para mitigar CVE-2026-114938 (Java4Shell) en procesadores x86 con AVX-512 afectados. ARM no está afectado por este CVE. No se ha demostrado un exploit específico del servicio.
+
+Jitsi Meet actualizado a stable-11509.
 
 **Novedades**
 - Los moderadores pueden cerrar encuestas, y las encuestas pueden limitarse a una sola respuesta
@@ -27,7 +31,9 @@ export const current = VersionInfo.of({
 - Numerosas correcciones en el chat, las pistas y el panel de participantes
 
 [Notas de la versión completas](https://github.com/jitsi/jitsi-meet-release-notes/blob/master/CHANGELOG-WEB.md)`,
-    de_DE: `Jitsi Meet auf stable-11509 aktualisiert.
+    de_DE: `Sicherheit: JVM-Base64-Intrinsics in Jicofo und JVB deaktiviert, um CVE-2026-114938 (Java4Shell) auf betroffenen x86-Prozessoren mit AVX-512 zu entschärfen. ARM ist von diesem CVE nicht betroffen. Ein dienstspezifischer Exploit wurde nicht nachgewiesen.
+
+Jitsi Meet auf stable-11509 aktualisiert.
 
 **Neuerungen**
 - Moderatoren können Umfragen schließen, und Umfragen lassen sich auf eine einzige Antwort beschränken
@@ -39,7 +45,9 @@ export const current = VersionInfo.of({
 - Zahlreiche Korrekturen an Chat, Medienspuren und Teilnehmerbereich
 
 [Vollständige Versionshinweise](https://github.com/jitsi/jitsi-meet-release-notes/blob/master/CHANGELOG-WEB.md)`,
-    pl_PL: `Zaktualizowano Jitsi Meet do stable-11509.
+    pl_PL: `Bezpieczeństwo: wyłączono intrinsics Base64 JVM w Jicofo i JVB, aby ograniczyć CVE-2026-114938 (Java4Shell) na podatnych procesorach x86 z AVX-512. ARM nie jest objęty tym CVE. Nie wykazano exploita specyficznego dla tej usługi.
+
+Zaktualizowano Jitsi Meet do stable-11509.
 
 **Nowości**
 - Moderatorzy mogą zamykać ankiety, a ankiety można ograniczyć do jednej odpowiedzi
@@ -51,7 +59,9 @@ export const current = VersionInfo.of({
 - Liczne poprawki czatu, ścieżek multimedialnych i panelu uczestników
 
 [Pełne informacje o wydaniu](https://github.com/jitsi/jitsi-meet-release-notes/blob/master/CHANGELOG-WEB.md)`,
-    fr_FR: `Mise à jour de Jitsi Meet vers stable-11509.
+    fr_FR: `Sécurité : désactivation des intrinsèques Base64 de la JVM dans Jicofo et JVB pour atténuer CVE-2026-114938 (Java4Shell) sur les processeurs x86 AVX-512 concernés. ARM n’est pas affecté par ce CVE. Aucun exploit propre au service n’a été établi.
+
+Mise à jour de Jitsi Meet vers stable-11509.
 
 **Nouveautés**
 - Les modérateurs peuvent clôturer les sondages, et les sondages peuvent être limités à une seule réponse
