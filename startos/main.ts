@@ -130,7 +130,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
     ...xmppConfig,
   }
 
-  // Both Java daemons disable Base64 intrinsics for CVE-2026-114938; preserve upstream JAVA_SYS_PROPS.
+  // Mitigates CVE-2026-114938 (Java4Shell). The images' run scripts overwrite JAVA_SYS_PROPS.
   const javaEnv = {
     ...commonEnv,
     JAVA_TOOL_OPTIONS: '-XX:-UseBASE64Intrinsics',

@@ -53,8 +53,6 @@ Five unmodified upstream images. The four Jitsi images run their entrypoints as 
 
 Startup is ordered: `prosody` first, then `web`, `jicofo`, and `jvb` alongside it. Oneshots run before their daemons — `nginx-patch` writes a longer proxy timeout so long-lived BOSH connections are not cut, and `prosody-chown` and `coturn-chown` hand their directories to the unprivileged user each image runs as, since StartOS mounts volumes root-owned. `coturn` and `coturn-chown` exist only while the TURN Relay interface has an enabled public domain.
 
-Jicofo and JVB inherit `JAVA_TOOL_OPTIONS=-XX:-UseBASE64Intrinsics` to mitigate CVE-2026-114938 (Java4Shell) on affected AVX-512 x86 processors. ARM is not affected by this CVE; no service-specific exploit has been established. Upstream-generated `JAVA_SYS_PROPS`, heap settings, authentication and network configuration are preserved.
-
 ## Volume and Data Layout
 
 One volume, subdivided per component. Each image reads its seed configuration from `/config` and treats it as read-only.
@@ -95,6 +93,7 @@ The internal credentials are generated once and never shown — nothing asks for
 | `DISABLE_HTTPS`                    | on                                          | StartOS terminates TLS at the edge                                                                                                                                                       |
 | `BOSH_RELATIVE`                    | on                                          | A relative BOSH URL works from any address — `.local`, clearnet, or Tor — without the client knowing the public hostname                                                                 |
 | `ENABLE_XMPP_WEBSOCKET`            | off                                         | The websocket URL has no relative form and would be generated as an unreachable absolute address; disabling it makes the client use BOSH                                                 |
+| `JAVA_TOOL_OPTIONS`                | `-XX:-UseBASE64Intrinsics` (Jicofo and JVB)  | Mitigates CVE-2026-114938 (Java4Shell) on affected x86-64 processors with AVX-512 VBMI; upstream's own JVM options still apply                                                               |
 | `JVB_ADVERTISE_PRIVATE_CANDIDATES` | off                                         | Bridge-internal addresses are unroutable for clients and can stall connection setup if offered                                                                                           |
 | `JVB_ADVERTISE_IPS`                | the published public IPv4s and global IPv6s | The bridge advertises the addresses StartOS publishes, and only those                                                                                                                    |
 | `JVB_DISABLE_STUN`                 | on                                          | Upstream's STUN mapping harvester is additive and would advertise whatever the box's default route exits from — a VPN exit, an upstream NAT — beside or instead of the published address |
