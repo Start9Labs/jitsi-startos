@@ -1,18 +1,13 @@
 import { VersionInfo, IMPOSSIBLE } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '2.0.11509:1',
+  version: '2.0.11509:2',
   releaseNotes: {
-    en_US:
-      'Security: mitigates CVE-2026-114938 (Java4Shell) on affected x86-64 processors with AVX-512 VBMI. ARM64 servers are not affected. Details: https://calif.io/java4shell/',
-    es_ES:
-      'Seguridad: mitiga CVE-2026-114938 (Java4Shell) en procesadores x86-64 afectados con AVX-512 VBMI. Los servidores ARM64 no están afectados. Detalles: https://calif.io/java4shell/',
-    de_DE:
-      'Sicherheit: entschärft CVE-2026-114938 (Java4Shell) auf betroffenen x86-64-Prozessoren mit AVX-512 VBMI. ARM64-Server sind nicht betroffen. Details: https://calif.io/java4shell/',
-    pl_PL:
-      'Bezpieczeństwo: ogranicza podatność CVE-2026-114938 (Java4Shell) na podatnych procesorach x86-64 z AVX-512 VBMI. Serwery ARM64 nie są podatne. Szczegóły: https://calif.io/java4shell/',
-    fr_FR:
-      'Sécurité : atténue CVE-2026-114938 (Java4Shell) sur les processeurs x86-64 concernés dotés d’AVX-512 VBMI. Les serveurs ARM64 ne sont pas concernés. Détails : https://calif.io/java4shell/',
+    en_US: 'Updates the bundled Coturn relay to 4.19.1.',
+    es_ES: 'Actualiza el relé Coturn incluido a 4.19.1.',
+    de_DE: 'Aktualisiert das mitgelieferte Coturn-Relay auf 4.19.1.',
+    pl_PL: 'Aktualizuje dołączony przekaźnik Coturn do wersji 4.19.1.',
+    fr_FR: 'Met à jour le relais Coturn intégré vers la version 4.19.1.',
   },
   migrations: {
     up: async () => {},
