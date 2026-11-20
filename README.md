@@ -238,7 +238,6 @@ startos_managed_env_vars:
   - JVB_AUTH_PASSWORD
   - JVB_PORT
   - JVB_BREWERY_MUC
-  - COLIBRI_REST_ENABLED
   - JVB_ADVERTISE_PRIVATE_CANDIDATES
   - JVB_DISABLE_STUN
   - JVB_ADVERTISE_IPS # when a public IPv4 or global IPv6 is published

@@ -280,7 +280,6 @@ export const main = sdk.setupMain(async ({ effects }) => {
           JVB_AUTH_PASSWORD,
           JVB_PORT: String(jvbMediaPort),
           JVB_BREWERY_MUC: 'jvbbrewery',
-          COLIBRI_REST_ENABLED: 'true',
           // Don't advertise docker-internal host candidates (10.x LXC bridge,
           // fc00::/7 IPv6 ULA). Clients can't route to them, and offering
           // them as high-priority pairs can stall ICE/DTLS on some networks.
