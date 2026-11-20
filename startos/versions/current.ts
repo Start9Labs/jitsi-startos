@@ -1,18 +1,18 @@
 import { VersionInfo, IMPOSSIBLE } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '2.0.11509.1:0',
+  version: '2.0.11509.1:1',
   releaseNotes: {
     en_US:
-      'Updated the Jitsi Meet container images to stable-11509-1, a rebuild of stable-11509 with no listed changes. Full notes: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11509-1',
+      'Security: updates the bundled Coturn relay to 4.19.2, which fixes a possible relay crash when answering a UDP authentication challenge. Full notes: https://github.com/coturn/coturn/blob/4.19.2/ChangeLog',
     es_ES:
-      'Actualiza las imágenes de contenedor de Jitsi Meet a stable-11509-1, una recompilación de stable-11509 sin cambios anunciados. Notas completas: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11509-1',
+      'Seguridad: actualiza el relé Coturn incluido a 4.19.2, que corrige un posible fallo del relé al responder a un desafío de autenticación UDP. Notas completas: https://github.com/coturn/coturn/blob/4.19.2/ChangeLog',
     de_DE:
-      'Aktualisiert die Jitsi-Meet-Container-Images auf stable-11509-1, einen Neubau von stable-11509 ohne angekündigte Änderungen. Vollständige Versionshinweise: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11509-1',
+      'Sicherheit: Aktualisiert das mitgelieferte Coturn-Relay auf 4.19.2, das einen möglichen Absturz des Relays bei der Beantwortung einer UDP-Authentifizierungsanfrage behebt. Vollständige Versionshinweise: https://github.com/coturn/coturn/blob/4.19.2/ChangeLog',
     pl_PL:
-      'Aktualizuje obrazy kontenerów Jitsi Meet do stable-11509-1, ponownej kompilacji stable-11509 bez ogłoszonych zmian. Pełne informacje o wydaniu: https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11509-1',
+      'Bezpieczeństwo: aktualizuje dołączony przekaźnik Coturn do wersji 4.19.2, która usuwa możliwą awarię przekaźnika podczas odpowiadania na wyzwanie uwierzytelniania UDP. Pełne informacje o wydaniu: https://github.com/coturn/coturn/blob/4.19.2/ChangeLog',
     fr_FR:
-      'Met à jour les images de conteneur Jitsi Meet vers stable-11509-1, une recompilation de stable-11509 sans changement annoncé. Notes de version complètes : https://github.com/jitsi/docker-jitsi-meet/releases/tag/stable-11509-1',
+      'Sécurité : met à jour le relais Coturn intégré vers la version 4.19.2, qui corrige un plantage possible du relais lors de la réponse à un défi d’authentification UDP. Notes de version complètes : https://github.com/coturn/coturn/blob/4.19.2/ChangeLog',
   },
   migrations: {
     up: async () => {},
