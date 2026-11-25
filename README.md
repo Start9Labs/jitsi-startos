@@ -60,29 +60,37 @@ One volume, subdivided per component. Each image reads its seed configuration fr
 | Volume | Mounted at                                                   | Purpose                                        |
 | ------ | ------------------------------------------------------------ | ---------------------------------------------- |
 | `main` | `prosody/` → `/config`, plus a subpath at `/var/lib/prosody` | XMPP accounts and prosody's seed configuration |
+| `main` | `prosody-plugins-custom/` → `/prosody-plugins-custom`        | Prosody modules you add yourself               |
 | `main` | one subpath each → `/config` in `web`, `jicofo`, `jvb`       | Their seed configuration                       |
 | `main` | `coturn/` → `/var/lib/coturn`                                | `turnserver.conf`, rendered on every start     |
 | `main` | root                                                         | `store.json`                                   |
 
 Prosody's **accounts** live at `/var/lib/prosody/data`, on their own subpath, rather than under `/config`. Upstream generates prosody's live configuration under `/run` and treats `/config` as a seed, so account data placed there would not survive a restart. Upstream moved `data_path` into the `data/` subdirectory in `stable-11146-2` and migrates only from the `/config` seed, so the `2.0.11146:2` migration moves accounts written by earlier releases across.
 
+**Your own Prosody modules** go in `/prosody-plugins-custom`, in the `prosody-sub` container. Upstream's configuration lists that directory first in `plugin_paths` and the image ships nothing there, so it is empty until you add a file. `prosody-chown` hands it to the unprivileged user on every start, as it does the account store.
+
 ## File Models
 
-Two models: the credentials, and the relay's configuration.
+Two models: the package's credentials and settings, and the relay's configuration.
 
 | File                     | Format | Modelled                  | Written by                                   |
 | ------------------------ | ------ | ------------------------- | -------------------------------------------- |
-| `store.json`             | JSON   | Yes — `FileHelper.json`   | Install, every init, and the password action |
+| `store.json`             | JSON   | Yes — `FileHelper.json`   | Install, every init, and both actions        |
 | `coturn/turnserver.conf` | text   | Yes — `FileHelper.string` | Every start, while the relay has a domain    |
 
-| Key                    | Set by     | Notes                                                                                      |
-| ---------------------- | ---------- | ------------------------------------------------------------------------------------------ |
-| `JICOFO_AUTH_PASSWORD` | Install    | Internal; how the conference focus authenticates to XMPP                                   |
-| `JVB_AUTH_PASSWORD`    | Install    | Internal; how the video bridge authenticates to XMPP                                       |
-| `TURN_SECRET`          | First init | Internal; the relay's shared secret, from which prosody mints short-lived TURN credentials |
-| `ADMIN_PASSWORD`       | The action | Yours; the credential for starting a meeting                                               |
+| Key                         | Set by                     | Notes                                                                                      |
+| --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------ |
+| `JICOFO_AUTH_PASSWORD`      | Install                    | Internal; how the conference focus authenticates to XMPP                                   |
+| `JVB_AUTH_PASSWORD`         | Install                    | Internal; how the video bridge authenticates to XMPP                                       |
+| `TURN_SECRET`               | First init                 | Internal; the relay's shared secret, from which prosody mints short-lived TURN credentials |
+| `ADMIN_PASSWORD`            | The password action        | Yours; the credential for starting a meeting                                               |
+| `XMPP_MODULES`              | The Prosody Modules action | Yours; additional modules for the main and guest virtual hosts                             |
+| `XMPP_MUC_MODULES`          | The Prosody Modules action | Yours; additional modules for the conference room component                                |
+| `XMPP_SPEAKERSTATS_MODULES` | The Prosody Modules action | Yours; additional modules for the speaker stats component                                  |
 
 The internal credentials are generated once and never shown — nothing asks for them and nothing displays them.
+
+The three module lists are empty until the action sets them. Each name must be lowercase letters, digits and underscores, because upstream's templates paste the names into prosody's Lua configuration: the action refuses any other name, and a list holding one after a hand edit is read as empty.
 
 **No configuration file reaches the Jitsi components** — the relay's `turnserver.conf` is the one file this package renders. Every Jitsi component is configured by environment, composed on each start, and that is where this package's overrides live:
 
@@ -98,6 +106,7 @@ The internal credentials are generated once and never shown — nothing asks for
 | `JVB_ADVERTISE_IPS`                | the published public IPv4s and global IPv6s | The bridge advertises the addresses StartOS publishes, and only those                                                                                                                    |
 | `JVB_DISABLE_STUN`                 | on                                          | Upstream's STUN mapping harvester is additive and would advertise whatever the box's default route exits from — a VPN exit, an upstream NAT — beside or instead of the published address |
 | `TURN_*`, `STUN_*`, `TURNS_*`      | the TURN Relay interface                    | Set only when the TURN Relay interface has an enabled public domain                                                                                                                      |
+| `XMPP_*_MODULES`                   | the lists in `store.json`                   | `XMPP_MODULES`, `XMPP_MUC_MODULES` and `XMPP_SPEAKERSTATS_MODULES`, each set only while its list is not empty; upstream's templates add the names to what they already enable            |
 
 ## Dependencies
 
@@ -131,7 +140,7 @@ If you intend to use Jitsi over the internet, give the **Web UI** interface a cl
 
 ## Actions
 
-One action, which renames itself to match what running it will do.
+Two actions. The password action renames itself to match what running it will do.
 
 ### Create / Reset Admin Password
 
@@ -145,6 +154,19 @@ Sets the password for the `admin` account that is allowed to start meetings.
 - **Outputs:** the username `admin` and the new password, masked and copyable.
 
 Guests do not need this. It is required only to **start** a meeting; anyone with the link can join one already running.
+
+### Prosody Modules
+
+Sets which additional Prosody modules are loaded, in three lists: one for the main and guest virtual hosts, one for the conference room component, and one for the speaker stats component.
+
+- **When to run it:** to load a module upstream ships but does not enable, or one of your own placed in `/prosody-plugins-custom`. Add the file before naming it here.
+- **What it changes:** the three lists in `store.json`, and nothing in prosody's accounts or seed configuration. The form opens with the current lists, and saving replaces all three.
+- **Cost:** the change to `store.json` restarts every daemon when the service is running, which ends any meeting in progress. Nothing restarts while it is stopped.
+- **Repeat safety:** safe to re-run; saving the lists unchanged writes the same values.
+- **What happens next:** prosody loads each named module at start. A name with no matching `mod_<name>.lua` in prosody's plugin directories is reported as an error in the prosody log, and prosody starts without it.
+- **Outputs:** none.
+
+A module runs inside prosody with full access to every meeting's signaling, so load only code you trust. Emptying a list stops loading its modules; the files in `/prosody-plugins-custom` stay where they are.
 
 ## Tasks
 
@@ -186,7 +208,7 @@ Because STUN is disabled, a bridge with no published address advertises no publi
 
 The `main` volume is copied wholesale — `sdk.Backups.ofVolumes('main')`. No dump step and nothing excluded.
 
-- **Included:** the XMPP accounts, every component's seed configuration, `store.json` with every credential, and the relay's rendered config.
+- **Included:** the XMPP accounts, every component's seed configuration, your own Prosody modules, `store.json` with every credential and module list, and the relay's rendered config.
 - **Restore:** complete. The admin account and password come back together, so no task is raised.
 
 ## Limitations and Differences
@@ -216,7 +238,7 @@ subcontainers:
   - jvb-sub # video bridge
   - coturn-sub # TURN relay
 volumes:
-  main: per-component subpaths → /config, prosody accounts → /var/lib/prosody/data, store.json at the root, coturn/ → /var/lib/coturn
+  main: per-component subpaths → /config, prosody accounts → /var/lib/prosody/data, your own prosody modules → /prosody-plugins-custom, store.json at the root, coturn/ → /var/lib/coturn
 file_models:
   - store.json
   - coturn/turnserver.conf
@@ -253,6 +275,9 @@ startos_managed_env_vars:
   - TURN_PORT # when the TURN Relay has a public domain
   - TURNS_HOST # when the TURN Relay has a public domain
   - TURNS_PORT # when the TURN Relay has a public domain
+  - XMPP_MODULES # when its list is not empty
+  - XMPP_MUC_MODULES # when its list is not empty
+  - XMPP_SPEAKERSTATS_MODULES # when its list is not empty
 dependencies: []
 interfaces:
   ui: { type: ui, port: 8000 }
@@ -260,6 +285,7 @@ interfaces:
   turn: { type: api, port: 3479, tls_port: 443 }
 actions:
   - reset-password # renames itself to "Create Admin Password" when unset
+  - prosody-modules # additional Prosody modules to load
 tasks:
   - { action: reset-password, severity: critical }
 health_checks:

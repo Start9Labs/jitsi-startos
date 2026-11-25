@@ -15,6 +15,7 @@ import {
   jvbMounts,
   prosodyEnv,
   prosodyMounts,
+  prosodyPluginsMountpoint,
   prosodyPort,
   prosodyStorageMountpoint,
   prosodyUser,
@@ -36,7 +37,14 @@ export const main = sdk.setupMain(async ({ effects }) => {
   if (!store) {
     throw new Error('store.json not found')
   }
-  const { JICOFO_AUTH_PASSWORD, JVB_AUTH_PASSWORD, TURN_SECRET } = store
+  const {
+    JICOFO_AUTH_PASSWORD,
+    JVB_AUTH_PASSWORD,
+    TURN_SECRET,
+    XMPP_MODULES,
+    XMPP_MUC_MODULES,
+    XMPP_SPEAKERSTATS_MODULES,
+  } = store
 
   // Resolve public IPs from the JVB media interface so JVB advertises
   // the correct addresses instead of the STUN-discovered one
@@ -174,6 +182,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
           '-R',
           `${prosodyUser}:${prosodyUser}`,
           prosodyStorageMountpoint,
+          prosodyPluginsMountpoint,
         ],
         user: 'root',
       },
@@ -188,6 +197,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
           JICOFO_AUTH_PASSWORD,
           JVB_AUTH_PASSWORD,
           turn,
+          modules: {
+            XMPP_MODULES,
+            XMPP_MUC_MODULES,
+            XMPP_SPEAKERSTATS_MODULES,
+          },
         }),
       },
       ready: {
