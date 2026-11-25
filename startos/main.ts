@@ -15,7 +15,6 @@ import {
   jvbMounts,
   prosodyEnv,
   prosodyMounts,
-  prosodyPluginsMountpoint,
   prosodyPort,
   prosodyStorageMountpoint,
   prosodyUser,
@@ -176,13 +175,14 @@ export const main = sdk.setupMain(async ({ effects }) => {
     })
     .addOneshot('prosody-chown', {
       subcontainer: prosodySub,
+      // Only the account store. The custom modules folder stays root-owned:
+      // prosody reads it and never needs to write the code it loads.
       exec: {
         command: [
           'chown',
           '-R',
           `${prosodyUser}:${prosodyUser}`,
           prosodyStorageMountpoint,
-          prosodyPluginsMountpoint,
         ],
         user: 'root',
       },

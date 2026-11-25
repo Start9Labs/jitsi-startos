@@ -67,7 +67,7 @@ One volume, subdivided per component. Each image reads its seed configuration fr
 
 Prosody's **accounts** live at `/var/lib/prosody/data`, on their own subpath, rather than under `/config`. Upstream generates prosody's live configuration under `/run` and treats `/config` as a seed, so account data placed there would not survive a restart. Upstream moved `data_path` into the `data/` subdirectory in `stable-11146-2` and migrates only from the `/config` seed, so the `2.0.11146:2` migration moves accounts written by earlier releases across.
 
-**Your own Prosody modules** go in `/prosody-plugins-custom`, in the `prosody-sub` container. Upstream's configuration lists that directory first in `plugin_paths` and the image ships nothing there, so it is empty until you add a file. `prosody-chown` hands it to the unprivileged user on every start, as it does the account store.
+**Your own Prosody modules** go in `/prosody-plugins-custom`, in the `prosody-sub` container. Upstream's configuration lists that directory first in `plugin_paths` and the image ships nothing there, so it is empty until you add a file. The folder stays root-owned, and `prosody-chown` leaves it alone: prosody only reads it, so it cannot change the code it loads. A module file must therefore be readable by everyone (mode `0644`, which writing it as root with `cat >` produces). One that prosody cannot read is reported in its log as `No such file or directory`, as if it were missing.
 
 ## File Models
 
@@ -162,11 +162,15 @@ Sets which additional Prosody modules are loaded, in three lists: one for the ma
 - **When to run it:** to load a module upstream ships but does not enable, or one of your own placed in `/prosody-plugins-custom`. Add the file before naming it here.
 - **What it changes:** the three lists in `store.json`, and nothing in prosody's accounts or seed configuration. The form opens with the current lists, and saving replaces all three.
 - **Cost:** the change to `store.json` restarts every daemon when the service is running, which ends any meeting in progress. Nothing restarts while it is stopped.
-- **Repeat safety:** safe to re-run; saving the lists unchanged writes the same values.
+- **Repeat safety:** safe to re-run; saving lists identical to those already in `store.json` writes nothing and restarts nothing.
 - **What happens next:** prosody loads each named module at start. A name with no matching `mod_<name>.lua` in prosody's plugin directories is reported as an error in the prosody log, and prosody starts without it.
 - **Outputs:** none.
 
-A module runs inside prosody with full access to every meeting's signaling, so load only code you trust. Emptying a list stops loading its modules; the files in `/prosody-plugins-custom` stay where they are.
+A module runs inside prosody with full access to every meeting's signaling, so load only code you trust. Removing a name from a list stops loading that module; the files in `/prosody-plugins-custom` stay where they are.
+
+The lists decide only which **new** names load. Because `/prosody-plugins-custom` comes first in `plugin_paths`, a file there named after a module the image already enables (`mod_speakerstats_component.lua`, for example) replaces that module on the next start, whether or not its name is in a list. Removing the file, not the name, undoes that.
+
+Replacing a module's file does not restart anything, and neither does saving the action without changing a list. Restart Jitsi Meet to load the new file.
 
 ## Tasks
 

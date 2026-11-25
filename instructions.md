@@ -54,3 +54,5 @@ Prosody is the part of Jitsi Meet that handles sign-in and meeting rooms, and it
 3. Save. Jitsi Meet restarts and loads the module.
 
 To stop loading a module, remove its name from the list and save. The file stays in the folder, and the folder is part of your backups.
+
+If you later replace a module's file with a newer copy, restart Jitsi Meet yourself from its service page. Saving the action without changing a list does not restart it, so the old copy keeps running until you do.

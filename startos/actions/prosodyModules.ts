@@ -9,7 +9,6 @@ const modules = (name: string, description: string) =>
     List.text(
       { name, description, default: [] },
       {
-        placeholder: 'example_module',
         patterns: [
           {
             regex: prosodyModulePattern,
@@ -66,7 +65,7 @@ export const prosodyModules = sdk.Action.withInput(
   async ({ effects, input }) => {
     // An empty item passes the pattern check but not store.json's shape,
     // which would read the whole list as empty.
-    const named = (modules: string[]) => modules.filter((m) => m !== '')
+    const named = (names: string[]) => names.filter((n) => n !== '')
     await storeJson.merge(effects, {
       XMPP_MODULES: named(input.XMPP_MODULES),
       XMPP_MUC_MODULES: named(input.XMPP_MUC_MODULES),
