@@ -36,7 +36,14 @@ export const main = sdk.setupMain(async ({ effects }) => {
   if (!store) {
     throw new Error('store.json not found')
   }
-  const { JICOFO_AUTH_PASSWORD, JVB_AUTH_PASSWORD, TURN_SECRET } = store
+  const {
+    JICOFO_AUTH_PASSWORD,
+    JVB_AUTH_PASSWORD,
+    TURN_SECRET,
+    XMPP_MODULES,
+    XMPP_MUC_MODULES,
+    XMPP_SPEAKERSTATS_MODULES,
+  } = store
 
   // Resolve public IPs from the JVB media interface so JVB advertises
   // the correct addresses instead of the STUN-discovered one
@@ -168,6 +175,8 @@ export const main = sdk.setupMain(async ({ effects }) => {
     })
     .addOneshot('prosody-chown', {
       subcontainer: prosodySub,
+      // Only the account store. The custom modules folder stays root-owned:
+      // prosody reads it and never needs to write the code it loads.
       exec: {
         command: [
           'chown',
@@ -188,6 +197,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
           JICOFO_AUTH_PASSWORD,
           JVB_AUTH_PASSWORD,
           turn,
+          modules: {
+            XMPP_MODULES,
+            XMPP_MUC_MODULES,
+            XMPP_SPEAKERSTATS_MODULES,
+          },
         }),
       },
       ready: {

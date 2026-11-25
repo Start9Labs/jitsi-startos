@@ -49,6 +49,17 @@ const dict = {
   Username: 34,
   Password: 35,
   'The current admin password stops working and is replaced by a newly generated one.': 44,
+
+  // actions (prosody modules)
+  'Prosody Modules': 53,
+  'Choose additional Prosody modules to load. Saving restarts Jitsi Meet if it is running, which ends any meeting in progress.': 54,
+  'Virtual Host Modules': 55,
+  'Loaded on the main and guest virtual hosts.': 56,
+  'Conference Room Modules': 57,
+  'Loaded on the conference room component.': 58,
+  'Speaker Stats Modules': 59,
+  'Loaded on the speaker stats component.': 60,
+  'Lowercase letters, digits and underscores only, without the "mod_" prefix or the ".lua" ending.': 61,
 } as const
 
 /**

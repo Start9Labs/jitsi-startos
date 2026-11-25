@@ -89,6 +89,9 @@ export const prosodyStorageMountpoint = '/var/lib/prosody'
 // prosody aborts at startup if this directory is not writable.
 export const prosodyUser = 's6'
 
+// First in the image's `plugin_paths`; the image declares it as an empty volume.
+export const prosodyPluginsMountpoint = '/prosody-plugins-custom'
+
 export const prosodyMounts = sdk.Mounts.of()
   .mountVolume({
     volumeId: 'main',
@@ -100,6 +103,12 @@ export const prosodyMounts = sdk.Mounts.of()
     volumeId: 'main',
     subpath: 'prosody-storage',
     mountpoint: prosodyStorageMountpoint,
+    readonly: false,
+  })
+  .mountVolume({
+    volumeId: 'main',
+    subpath: 'prosody-plugins-custom',
+    mountpoint: prosodyPluginsMountpoint,
     readonly: false,
   })
 
@@ -137,6 +146,10 @@ export function prosodyEnv(opts: {
   JICOFO_AUTH_PASSWORD: string
   JVB_AUTH_PASSWORD: string
   turn: Turn | null
+  modules: Record<
+    'XMPP_MODULES' | 'XMPP_MUC_MODULES' | 'XMPP_SPEAKERSTATS_MODULES',
+    string[]
+  >
 }) {
   const env: Record<string, string> = {
     TZ: 'UTC',
@@ -166,6 +179,12 @@ export function prosodyEnv(opts: {
       env.TURNS_HOST = turn.domain
       env.TURNS_PORT = String(turn.turnsPort)
     }
+  }
+
+  // The image's templates split each list on commas; an unset variable adds
+  // nothing.
+  for (const [name, modules] of Object.entries(opts.modules)) {
+    if (modules.length) env[name] = modules.join(',')
   }
 
   return env

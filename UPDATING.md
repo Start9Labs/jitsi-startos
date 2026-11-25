@@ -35,6 +35,16 @@ Find the latest stable tag published by [docker-jitsi-meet](https://github.com/j
 
 Read the upstream release notes for changes to the container contract, not just to Jitsi itself — the images run unprivileged (uid 1000) and each treats `/config` as a read-only seed. A release that adds a directory the containers must write to needs a matching mount plus a `chown` oneshot in `startos/main.ts`, and a port change in `web/rootfs/defaults/default` needs `uiPort` in `startos/utils.ts` updated to match.
 
+The Prosody Modules action rests on two things in the prosody image, both in its `/defaults/conf.d/jitsi-meet.cfg.lua` template. Check each in the new tag:
+
+- the template still reads `XMPP_MODULES`, `XMPP_MUC_MODULES` and `XMPP_SPEAKERSTATS_MODULES`, the three variables the action sets. A renamed variable is ignored without an error, so the listed modules stop loading.
+- `/prosody-plugins-custom` is still the first entry in `plugin_paths`. If it moves or goes, files in the folder are no longer found, or no longer win over the image's own modules.
+
+```bash
+docker run --rm --entrypoint grep ghcr.io/jitsi/prosody:stable-<build> \
+  -nE 'plugin_paths|XMPP_(MUC_|SPEAKERSTATS_)?MODULES' /defaults/conf.d/jitsi-meet.cfg.lua
+```
+
 If a release changes which uid the containers run as, files an earlier release wrote stay owned by the old uid, and the entrypoints copy seed data with plain `cp` that fails silently on a permission error.
 
 A Coturn bump needs its own check: `renderTurnserverConf` in `startos/utils.ts` depends on how Coturn maps `external-ip` to `relay-ip` and orders `allowed-peer-ip` before `denied-peer-ip`, so read its changelog for either, and run a forced-relay call (`#config.forceTurnRelay=true`) before shipping.

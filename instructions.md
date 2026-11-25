@@ -38,3 +38,21 @@ The **TURN Relay Address** check works the same way: green once the TURN Relay i
 ### Actions
 
 - **Reset Admin Password** — generate a new admin password (shown once). Use it to rotate the password or recover if you've lost it. It asks for confirmation first, because the current password stops working.
+- **Prosody Modules** — choose additional Prosody modules to load. Most servers never need it; use it when an add-on's instructions name a module to enable. Saving restarts Jitsi Meet, which ends any meeting in progress.
+
+### Adding your own Prosody module
+
+Prosody is the part of Jitsi Meet that handles sign-in and meeting rooms, and it can be extended with modules: Lua files named `mod_<name>.lua`. A module sees everything that passes through your meetings, so add only code you trust.
+
+1. With Jitsi Meet running, copy the file into the `/prosody-plugins-custom` folder. From a computer with `start-cli` set up for your server:
+
+   ```
+   start-cli package attach jitsi -n prosody-sub -u root -- sh -c 'cat > /prosody-plugins-custom/mod_example.lua' < mod_example.lua
+   ```
+
+2. Run the **Prosody Modules** action and add the module's name, without `mod_` or `.lua` (here, `example`), to the list its instructions name: virtual host, conference room, or speaker stats.
+3. Save. Jitsi Meet restarts and loads the module.
+
+To stop loading a module, remove its name from the list and save. The file stays in the folder, and the folder is part of your backups.
+
+If you later replace a module's file with a newer copy, restart Jitsi Meet yourself from its service page. Saving the action without changing a list does not restart it, so the old copy keeps running until you do.
