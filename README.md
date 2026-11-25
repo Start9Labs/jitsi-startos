@@ -67,7 +67,7 @@ One volume, subdivided per component. Each image reads its seed configuration fr
 
 Prosody's **accounts** live at `/var/lib/prosody/data`, on their own subpath, rather than under `/config`. Upstream generates prosody's live configuration under `/run` and treats `/config` as a seed, so account data placed there would not survive a restart. Upstream moved `data_path` into the `data/` subdirectory in `stable-11146-2` and migrates only from the `/config` seed, so the `2.0.11146:2` migration moves accounts written by earlier releases across.
 
-**Your own Prosody modules** go in `/prosody-plugins-custom`, in the `prosody-sub` container. Upstream's configuration lists that directory first in `plugin_paths` and the image ships nothing there, so it is empty until you add a file. The folder stays root-owned, and `prosody-chown` leaves it alone: prosody only reads it, so it cannot change the code it loads. A module file must therefore be readable by everyone (mode `0644`, which writing it as root with `cat >` produces). One that prosody cannot read is reported in its log as `No such file or directory`, as if it were missing.
+**Your own Prosody modules** go in `/prosody-plugins-custom`, in the `prosody-sub` container. Upstream's configuration lists that directory first in `plugin_paths` and the image ships nothing there, so it is empty until you add a file. The folder stays root-owned, and `prosody-chown` leaves it alone, because prosody only needs to read it. A module file must therefore be readable by everyone (mode `0644`, which writing it as root with `cat >` produces). One that prosody cannot read is reported in its log as `No such file or directory`, as if it were missing.
 
 ## File Models
 
