@@ -23,9 +23,9 @@ export const turnsPort = 443
 export const turnHostId = 'turn-multi'
 export const turnInterfaceId = 'turn'
 
-// Prosody's client port, published for an external Jibri only while the
-// Recording action is on. Its own host, so no domain added to another
-// interface ever reaches it.
+// Prosody's client port, bound for Jibri while Recording is on and exported
+// as an interface only while recorders on other servers are allowed. Its own
+// host, so no domain added to another interface ever reaches it.
 export const xmppPort = 5222
 export const xmppHostId = 'xmpp-multi'
 export const xmppInterfaceId = 'xmpp'
@@ -143,6 +143,50 @@ export function recorderXmppServers(
         h.metadata.kind !== 'plugin',
     )
     .map((h) => `${h.hostname}:${h.port}`)
+}
+
+// What a Jibri needs to record here, as Jitsi publishes it: on the `public`
+// volume for a Jibri on this server, and encoded into one string for a Jibri
+// on another. The Jibri package imports these.
+export const recorderPublicSubpath = 'recorder'
+export const recorderCredentialsFile = 'credentials.json'
+export type RecorderCredentials = {
+  xmppPassword: string
+  recorderPassword: string
+  certSha256: string
+}
+export type RecorderConnection = RecorderCredentials & {
+  v: 1
+  xmppServers: string[]
+  publicUrls: string[]
+  // base64 SHA-256 of this server's root CA public key, which signs the Web
+  // UI's certificate on every address that is not a public domain.
+  webCaSpki?: string
+}
+const connectionPrefix = 'jitsi-recorder:'
+
+export function encodeRecorderConnection(c: RecorderConnection): string {
+  return connectionPrefix + Buffer.from(JSON.stringify(c)).toString('base64url')
+}
+
+export function decodeRecorderConnection(text: string): RecorderConnection {
+  const t = text.trim()
+  if (!t.startsWith(connectionPrefix))
+    throw new Error('not a connection string')
+  const c = JSON.parse(
+    Buffer.from(t.slice(connectionPrefix.length), 'base64url').toString(),
+  )
+  if (
+    c?.v !== 1 ||
+    !Array.isArray(c.xmppServers) ||
+    !c.xmppServers.length ||
+    !Array.isArray(c.publicUrls) ||
+    ![c.xmppPassword, c.recorderPassword, c.certSha256].every(
+      (x) => typeof x === 'string' && x,
+    )
+  )
+    throw new Error('incomplete connection string')
+  return c
 }
 
 export const coturnDataDir = '/var/lib/coturn'
@@ -306,11 +350,9 @@ const recorderCertName = xmppConfig.XMPP_AUTH_DOMAIN
 export const recorderCertVolumeDir = 'prosody/certs'
 export const recorderCertFile = `${recorderCertName}.crt`
 
-// Runs before prosody on every start. On: keeps the pinnable certificate.
-// One already in /config/certs is kept and pinned as is, an older image's
-// included; otherwise one is created once, valid for ten years so a
-// recorder's pin is not cut short by a yearly expiry (rotating it means
-// replacing the file and re-pinning). Off: deletes Jibri's two accounts, so a
+// Runs before prosody on every start. On: keeps the pinnable certificate,
+// creating one (ten years, CA:FALSE) when none is there or the one there could
+// sign others, as an older image's could. Off: deletes Jibri's two accounts, so a
 // password left over from an earlier time on cannot sign in. Off works on the
 // files because prosodyctl in this image deletes users only through a running
 // prosody, and the recorder's host is not configured while recording is off;
@@ -328,7 +370,7 @@ export function recorderSetupExec(on: boolean): {
     // it; anything those reach is already writable by that user.
     const asProsody = [
       'set -eu',
-      `if [ ! -s '${crt}' ] || [ ! -s '${key}' ]; then`,
+      `if [ ! -s '${crt}' ] || [ ! -s '${key}' ] || ! openssl x509 -in '${crt}' -noout -ext basicConstraints 2>/dev/null | grep -q 'CA:FALSE'; then`,
       `  rm -f '${key}.new' '${crt}.new'`,
       `  openssl req -quiet -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 -subj '/CN=${recorderCertName}' -addext 'subjectAltName=DNS:${recorderCertName}' -addext 'basicConstraints=critical,CA:FALSE' -addext 'keyUsage=critical,digitalSignature,keyEncipherment' -addext 'extendedKeyUsage=serverAuth' -keyout '${key}.new' -out '${crt}.new'`,
       `  mv -f '${key}.new' '${key}'`,
@@ -396,62 +438,81 @@ export type Recording = {
   JIBRI_RECORDER_PASSWORD: string
 } | null
 
-// The Rotate Recorder Passwords action, without its effects.
+// The Rotate Recorder Passwords action, without its effects. Prosody keeps
+// the password an account was created with, so the new ones are registered
+// before store.json holds them.
 //
-// Recording on: one account at a time, its new password is registered and
-// then saved, so a failed register leaves every account on the password
-// store.json holds, and a later run overwrites any account a failure left
-// behind. Saving restarts Jitsi Meet if it is running (main reads store.json
-// with .const), which ends sessions signed in with an old password; if a save
-// fails after its register, restart does that instead. A failed restart never
-// hides the save's error.
+// Stored passwords remain authoritative after a failed rotation.
+// A rejected write may already have replaced store.json.
 //
-// Recording off: neither account should exist, so nothing is registered. The
-// two account files are purged first, in case Recording was switched off while
-// Jitsi Meet was stopped and no start has deleted them yet; register-setup
-// then creates both from the new stored passwords when Recording is back on.
-// Both are saved at once, so Jitsi Meet restarts at most once. Recording may
-// have been turned on while this ran, and its start may already have created
-// both accounts with the old passwords, which register-setup never changes; so
-// the switch is read again after the save, and if it is now on both new
-// passwords are registered and Jitsi Meet restarts, ending any session signed
-// in with an old one.
+// Recording off: neither account should exist. Their files are purged first,
+// in case Recording was switched off while Jitsi Meet was stopped, then both
+// passwords are saved; register-setup creates the accounts from them when
+// Recording is back on. If Recording was turned on while this ran, its start
+// may already have created them with the old passwords, so they are
+// registered after all and Jitsi Meet restarts.
 export async function rotateRecorderAccounts(io: {
   recording: boolean
   recordingNow: () => Promise<boolean>
+  current: () => Promise<NonNullable<Recording>>
   newPassword: () => string
   register: (user: string, host: string, password: string) => Promise<void>
   purge: () => Promise<void>
-  save: (passwords: Partial<NonNullable<Recording>>) => Promise<void>
+  save: (passwords: NonNullable<Recording>) => Promise<void>
   restart: () => Promise<void>
 }): Promise<void> {
+  const next = {
+    JIBRI_XMPP_PASSWORD: io.newPassword(),
+    JIBRI_RECORDER_PASSWORD: io.newPassword(),
+  }
   const accounts = [
     [jibriXmppUser, xmppConfig.XMPP_AUTH_DOMAIN, 'JIBRI_XMPP_PASSWORD'],
     [jibriRecorderUser, xmppHiddenDomain, 'JIBRI_RECORDER_PASSWORD'],
   ] as const
-  if (!io.recording) {
-    await io.purge()
-    const passwords = {
-      JIBRI_XMPP_PASSWORD: io.newPassword(),
-      JIBRI_RECORDER_PASSWORD: io.newPassword(),
-    }
-    await io.save(passwords)
-    if (!(await io.recordingNow())) return
+  const registerAll = async (passwords: NonNullable<Recording>) => {
     for (const [user, host, field] of accounts)
       await io.register(user, host, passwords[field])
-    await io.restart()
-    return
   }
-  for (const [user, host, field] of accounts) {
-    const password = io.newPassword()
-    await io.register(user, host, password)
+  const recover = async () => {
     try {
-      await io.save({ [field]: password })
+      const stored = await io.current()
+      for (const [user, host, field] of accounts) {
+        try {
+          await io.register(user, host, stored[field])
+        } catch (e) {
+          console.error(`Could not reconcile recorder account ${user}`, e)
+        }
+      }
     } catch (e) {
-      await io.restart().catch(() => {})
+      console.error('Could not read stored recorder passwords for recovery', e)
+    }
+    await io.restart().catch((e) => {
+      console.error(
+        'Could not restart Jitsi Meet after recorder rotation failed',
+        e,
+      )
+    })
+  }
+  if (io.recording) {
+    try {
+      await registerAll(next)
+      await io.save(next)
+    } catch (e) {
+      await recover()
       throw e
     }
+    return
   }
+  await io.purge()
+  await io.save(next)
+  if (!(await io.recordingNow())) return
+  try {
+    await registerAll(next)
+  } catch (e) {
+    await recover()
+    throw e
+  }
+  await io.restart()
 }
 
 // Whether StartOS means the service to be running: sdk.restart on a stopped
@@ -541,7 +602,12 @@ export const javaEnv = {
   JAVA_TOOL_OPTIONS: '-XX:-UseBASE64Intrinsics',
 }
 
-export function webEnv(opts: { recording: boolean }) {
+// The client's live-streaming dialog validates what a moderator types against
+// this; Jibri takes either a YouTube stream key or a full RTMP(S) URL.
+const liveStreamingInput =
+  '^(?:rtmps?://[^ ]+|(?:[a-zA-Z0-9]{4}(?:-(?!$)|$)){4})$'
+
+export function webEnv(opts: { recording: boolean; liveStreaming: boolean }) {
   const env: Record<string, string> = {
     ...commonEnv,
     ENABLE_AUTH: '1',
@@ -561,7 +627,13 @@ export function webEnv(opts: { recording: boolean }) {
   // Turns on the client's recording service and names the hidden domain, so
   // the recorder is left out of the participant list. The template reads no
   // brewery name.
-  if (opts.recording) env.ENABLE_RECORDING = '1'
+  if (opts.recording) {
+    env.ENABLE_RECORDING = '1'
+    if (opts.liveStreaming) {
+      env.ENABLE_LIVESTREAMING = '1'
+      env.ENABLE_LIVESTREAMING_VALIDATOR_REGEXP_STRING = liveStreamingInput
+    }
+  }
 
   return env
 }

@@ -89,14 +89,13 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
 
   const receipts = [uiReceipt, jvbReceipt, turnReceipt]
 
-  // Bound only while the Recording action is on; a pass that skips it
-  // disables the binding and keeps its port and the user's address choices.
-  // Raw TCP like the media port: prosody negotiates TLS itself (STARTTLS,
-  // which it requires on this port), so StartOS adds no TLS leg.
+  // Bound while Recording is on, for a Jibri on this server at its bridge
+  // address; exported, which puts it on the LAN, only while recorders on other
+  // servers are allowed. Raw TCP: prosody requires STARTTLS on this port.
   const recording = await storeJson
-    .read((s) => s.ENABLE_RECORDING)
+    .read((s) => ({ on: s.ENABLE_RECORDING, remote: s.RECORDING_REMOTE }))
     .const(effects)
-  if (recording) {
+  if (recording?.on) {
     const xmppOrigin = await sdk.MultiHost.of(effects, xmppHostId).bindPort(
       xmppPort,
       {
@@ -106,23 +105,24 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
         addSsl: null,
       },
     )
-    receipts.push(
-      await xmppOrigin.export([
-        sdk.createInterface(effects, {
-          name: i18n('Recorder XMPP'),
-          id: xmppInterfaceId,
-          description: i18n(
-            'XMPP for an external Jibri recorder. Keep it on your private network.',
-          ),
-          type: 'api',
-          masked: false,
-          schemeOverride: null,
-          username: null,
-          path: '',
-          query: {},
-        }),
-      ]),
-    )
+    if (recording.remote)
+      receipts.push(
+        await xmppOrigin.export([
+          sdk.createInterface(effects, {
+            name: i18n('Recorder XMPP'),
+            id: xmppInterfaceId,
+            description: i18n(
+              'XMPP for an external Jibri recorder. Keep it on your private network.',
+            ),
+            type: 'api',
+            masked: false,
+            schemeOverride: null,
+            username: null,
+            path: '',
+            query: {},
+          }),
+        ]),
+      )
   }
 
   return receipts
