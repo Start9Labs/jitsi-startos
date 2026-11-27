@@ -2,6 +2,7 @@ import { storeJson } from './fileModels/store.json'
 import { turnserverConf } from './fileModels/turnserver.conf'
 import { i18n } from './i18n'
 import { sdk } from './sdk'
+import { utils } from '@start9labs/start-sdk'
 import {
   coturnConfPath,
   coturnDataDir,
@@ -45,8 +46,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
     XMPP_SPEAKERSTATS_MODULES,
   } = store
 
-  // Resolve public IPs from the JVB media interface so JVB advertises
-  // the correct addresses instead of the STUN-discovered one
+  // Static mappings preserve StartOS's enabled IP/port pairs.
   const jvbPublic = await sdk.host
     .getOwn(effects, jvbMediaHostId, (host) => {
       const iface =
@@ -57,17 +57,32 @@ export const main = sdk.setupMain(async ({ effects }) => {
       const hostnames = (kind: 'ipv4' | 'ipv6') =>
         iface?.addressInfo
           .filter({ visibility: 'public', kind })
-          .format('hostname-info')
-          .map((h) => h.hostname) ?? []
+          .format('hostname-info') ?? []
+      const addresses = host?.bindings[jvbMediaPort]?.addresses
       return {
+        // LAN, VPN and the container bridge, so participants there reach the
+        // bridge too.
+        privateIpv4: addresses
+          ? addresses.available.filter(
+              (h) =>
+                h.metadata.kind === 'ipv4' &&
+                !h.public &&
+                h.metadata.gateway !== 'lo' &&
+                utils.isAddressEnabled(addresses, h),
+            )
+          : [],
         ipv4: hostnames('ipv4'),
         // Global unicast only (2000::/3); StartOS forwards no other v6 to the container.
-        ipv6: hostnames('ipv6').filter((h) => /^[23]/.test(h)),
+        ipv6: hostnames('ipv6').filter((h) => /^[23]/.test(h.hostname)),
       }
     })
     .const()
-  const jvbPublicIps = jvbPublic.ipv4
-  const jvbAdvertiseIps = [...jvbPublic.ipv4, ...jvbPublic.ipv6]
+  const jvbPublicIps = jvbPublic.ipv4.map((h) => h.hostname)
+  const jvbAdvertiseIps = [
+    ...jvbPublic.ipv4,
+    ...jvbPublic.ipv6,
+    ...jvbPublic.privateIpv4,
+  ].map((h) => `${h.hostname}#${h.port ?? jvbMediaPort}`)
 
   const uiClearnetExposure = sdk.host.getOwn(effects, uiHostId, (host) => {
     const iface =
@@ -294,10 +309,8 @@ export const main = sdk.setupMain(async ({ effects }) => {
           JVB_AUTH_PASSWORD,
           JVB_PORT: String(jvbMediaPort),
           JVB_BREWERY_MUC: 'jvbbrewery',
-          // Don't advertise docker-internal host candidates (10.x LXC bridge,
-          // fc00::/7 IPv6 ULA). Clients can't route to them, and offering
-          // them as high-priority pairs can stall ICE/DTLS on some networks.
-          JVB_ADVERTISE_PRIVATE_CANDIDATES: 'false',
+          // Required for LAN mappings; also exposes the container's host candidates.
+          JVB_ADVERTISE_PRIVATE_CANDIDATES: 'true',
           // The advertised address comes from the published interface, full
           // stop. ice4j's STUN mapping harvester reports whatever the box's
           // default route exits from — a VPN exit, an upstream NAT — which is
