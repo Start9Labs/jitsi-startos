@@ -68,7 +68,7 @@ The Recording action rests on what four images read. Check each in the new tag:
 
   Any other path, file name or depth means `recorderSetupExec` and `prosodyHostDir` must move with it before the tag ships.
 
-- jicofo reads `ENABLE_RECORDING` and `JIBRI_BREWERY_MUC` in `/defaults/jicofo.conf`; web reads `ENABLE_RECORDING` in `/defaults/settings-config.js`.
+- jicofo reads `ENABLE_RECORDING` and `JIBRI_BREWERY_MUC` in `/defaults/jicofo.conf`; web reads `ENABLE_RECORDING`, `ENABLE_LIVESTREAMING` and `ENABLE_LIVESTREAMING_VALIDATOR_REGEXP_STRING` in `/defaults/settings-config.js`, and the validator still reaches the client as a quoted JavaScript string (the package's pattern contains no backslash for that reason).
 - every image, jibri's `/defaults/xmpp.conf` included, still defaults `XMPP_HIDDEN_DOMAIN` to `hidden.meet.jitsi`, the value `xmppHiddenDomain` in `startos/utils.ts` shows to the user. A variable an image stops reading is ignored without an error.
 
 ```bash

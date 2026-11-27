@@ -1,3 +1,6 @@
+import { X509Certificate } from 'node:crypto'
+import { rm } from 'node:fs/promises'
+import { recorderCredentials } from './fileModels/recorderCredentials.json'
 import { storeJson } from './fileModels/store.json'
 import { turnserverConf } from './fileModels/turnserver.conf'
 import { i18n } from './i18n'
@@ -22,6 +25,9 @@ import {
   prosodyPort,
   prosodyStorageMountpoint,
   prosodyUser,
+  readRecorderCert,
+  recorderCertFile,
+  recorderCertVolumeDir,
   recorderSetupExec,
   renderTurnserverConf,
   turnHostId,
@@ -117,13 +123,14 @@ export const main = sdk.setupMain(async ({ effects }) => {
 
   // Feeds only the xmpp-exposure check, so it is watched rather than read
   // with .const(), which would restart every daemon when an address is toggled.
-  const xmppState = recording
-    ? await followXmppExposure(
-        sdk.host.getOwn(effects, xmppHostId, (host) =>
-          xmppExposure(host?.bindings[xmppPort]?.addresses),
-        ),
-      )
-    : null
+  const xmppState =
+    recording && store.RECORDING_REMOTE
+      ? await followXmppExposure(
+          sdk.host.getOwn(effects, xmppHostId, (host) =>
+            xmppExposure(host?.bindings[xmppPort]?.addresses),
+          ),
+        )
+      : null
 
   const turnEndpoint = await sdk.host
     .getOwn(effects, turnHostId, (host) => {
@@ -178,12 +185,32 @@ export const main = sdk.setupMain(async ({ effects }) => {
     'web-sub',
   )
 
-  const prosodySub = sdk.SubContainer.of(
+  const prosodySub = await sdk.SubContainer.of(
     effects,
     { imageId: 'prosody' },
     prosodyMounts,
     'prosody-sub',
   )
+
+  // A Jibri on this server reads its credentials from the `public` volume,
+  // and pins the certificate by this fingerprint.
+  if (recording) {
+    const { command, user } = recorderSetupExec(true)
+    await prosodySub.execFail(command, { user })
+    const cert = await readRecorderCert(
+      sdk.volumes.main.subpath(recorderCertVolumeDir),
+      recorderCertFile,
+    )
+    if (typeof cert !== 'object')
+      throw new Error(`recorder certificate is ${cert}`)
+    await recorderCredentials.write(effects, {
+      xmppPassword: recording.JIBRI_XMPP_PASSWORD,
+      recorderPassword: recording.JIBRI_RECORDER_PASSWORD,
+      certSha256: new X509Certificate(cert.pem).fingerprint256,
+    })
+  } else {
+    await rm(recorderCredentials.path, { force: true })
+  }
 
   return sdk.Daemons.of(effects)
     .addOneshot('nginx-patch', {
@@ -218,7 +245,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
     })
     .addOneshot('recorder-setup', {
       subcontainer: prosodySub,
-      exec: recorderSetupExec(!!recording),
+      exec: recording ? { command: ['true'] } : recorderSetupExec(false),
       requires: ['prosody-chown'],
     })
     .addDaemon('prosody', {
@@ -254,7 +281,10 @@ export const main = sdk.setupMain(async ({ effects }) => {
       exec: {
         command: sdk.useEntrypoint(),
         runAsInit: true,
-        env: webEnv({ recording: !!recording }),
+        env: webEnv({
+          recording: !!recording,
+          liveStreaming: store.ENABLE_LIVESTREAMING,
+        }),
       },
       ready: {
         display: i18n('Web Interface'),

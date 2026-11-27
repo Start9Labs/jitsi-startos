@@ -23,7 +23,7 @@ export const rotateRecorderPasswords = sdk.Action.withoutInput(
       "Replace both passwords of the external Jibri recorder's accounts with newly generated ones.",
     ),
     warning: i18n(
-      'The recorder stops connecting until you copy the new passwords from Recorder Connection Details into its .env file and restart it. Saving them restarts Jitsi Meet if it is running, twice while Recording is on, which ends any meeting in progress.',
+      'Saving the new passwords restarts Jitsi Meet if it is running, which ends any meeting in progress. A Jibri on this server picks them up by itself; a recorder on another server stops connecting until you give it the new connection details.',
     ),
     allowedStatuses: 'any',
     group: null,
@@ -56,6 +56,7 @@ export const rotateRecorderPasswords = sdk.Action.withoutInput(
         )
         await rotateRecorderAccounts({
           recording: !!store.ENABLE_RECORDING,
+          current: store,
           recordingNow: async () =>
             !!(await storeJson.read().once())?.ENABLE_RECORDING,
           newPassword: getPassword,
@@ -97,7 +98,7 @@ export const rotateRecorderPasswords = sdk.Action.withoutInput(
       version: '1',
       title: i18n('Success'),
       message: i18n(
-        'New recorder passwords are set. Run Recorder Connection Details and update the recorder with them.',
+        'New recorder passwords are set. Give any recorder on another server the new connection details.',
       ),
       result: null,
     }

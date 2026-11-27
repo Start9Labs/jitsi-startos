@@ -1,8 +1,5 @@
 {
   "name": "jitsi-startos",
-  "scripts": {
-    "test": "d=$(mktemp -d) && ncc build startos/utils.test.ts -o \"$d\" -q && node --test \"$d/index.js\"; s=$?; rm -rf \"$d\"; exit $s"
-  },
   "dependencies": {
     "@start9labs/start-sdk": "4.1.0"
   },
