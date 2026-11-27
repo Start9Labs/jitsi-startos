@@ -29,7 +29,7 @@ A guest joining from somewhere else needs two separate things from your server: 
 
 Without these, Jitsi still works for participants on your local network. Tor is not a substitute — Tor Browser disables WebRTC and Tor can't carry the UDP media a call needs, so guests can't join a meeting over it.
 
-The **Video Bridge Address** health check tells you which of these states you're in: green once the media interface has a public IPv4, red when the Web UI is on clearnet but the media interface isn't (meetings connect and carry no audio or video), and grey when the Web UI has no clearnet address. In the grey state the bridge is reachable only on your local network. The bridge only ever advertises the address you published — it never guesses one, so the check going grey is information, not a fault.
+The **Video Bridge Address** health check tells you which of these states you're in: green once the media interface has a public IPv4, red when the Web UI is on clearnet but the media interface isn't (meetings connect and carry no audio or video), and grey when the Web UI has no clearnet address. In the grey state the bridge is reachable only on your local network. The bridge's mapped addresses and ports follow what you enabled on Video Bridge Media — it never guesses a public mapping, so the check going grey is information, not a fault. It also offers internal container addresses as ICE candidates; browsers that cannot reach those use a reachable mapped address instead.
 
 The **TURN Relay Address** check works the same way: green once the TURN Relay interface has a public domain with both addresses enabled, red when the Web UI is on clearnet but the relay isn't, and grey when the Web UI has no clearnet address.
 

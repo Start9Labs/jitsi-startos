@@ -1,18 +1,18 @@
 import { VersionInfo, IMPOSSIBLE } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '2.0.11509.1:2',
+  version: '2.0.11509.1:3',
   releaseNotes: {
     en_US:
-      'New: a Prosody Modules action loads additional Prosody modules, including your own from a new custom modules folder.',
+      'Meetings among participants on your local network now carry audio and video when the Video Bridge Media interface has no public IPv4.',
     es_ES:
-      'Nuevo: una acción «Módulos de Prosody» carga módulos adicionales de Prosody, incluidos los tuyos desde una nueva carpeta de módulos personalizados.',
+      'Las reuniones entre participantes de tu red local ahora transmiten audio y vídeo cuando la interfaz Video Bridge Media no tiene IPv4 pública.',
     de_DE:
-      'Neu: Die Aktion „Prosody-Module“ lädt zusätzliche Prosody-Module, auch eigene aus einem neuen Ordner für benutzerdefinierte Module.',
+      'Besprechungen zwischen Teilnehmern in deinem lokalen Netzwerk übertragen jetzt Ton und Bild, wenn die Schnittstelle Video Bridge Media keine öffentliche IPv4 hat.',
     pl_PL:
-      'Nowość: akcja „Moduły Prosody” ładuje dodatkowe moduły Prosody, w tym własne z nowego folderu modułów niestandardowych.',
+      'Spotkania uczestników z Twojej sieci lokalnej przesyłają teraz dźwięk i obraz, gdy interfejs Video Bridge Media nie ma publicznego adresu IPv4.',
     fr_FR:
-      'Nouveau : une action « Modules Prosody » charge des modules Prosody supplémentaires, y compris les vôtres depuis un nouveau dossier de modules personnalisés.',
+      'Les réunions entre participants de votre réseau local transmettent désormais le son et la vidéo lorsque l’interface Video Bridge Media n’a pas d’IPv4 publique.',
   },
   migrations: {
     up: async () => {},

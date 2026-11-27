@@ -73,10 +73,10 @@ Prosody's **accounts** live at `/var/lib/prosody/data`, on their own subpath, ra
 
 Two models: the package's credentials and settings, and the relay's configuration.
 
-| File                     | Format | Modelled                  | Written by                                   |
-| ------------------------ | ------ | ------------------------- | -------------------------------------------- |
-| `store.json`             | JSON   | Yes — `FileHelper.json`   | Install, every init, and both actions        |
-| `coturn/turnserver.conf` | text   | Yes — `FileHelper.string` | Every start, while the relay has a domain    |
+| File                     | Format | Modelled                  | Written by                                |
+| ------------------------ | ------ | ------------------------- | ----------------------------------------- |
+| `store.json`             | JSON   | Yes — `FileHelper.json`   | Install, every init, and both actions     |
+| `coturn/turnserver.conf` | text   | Yes — `FileHelper.string` | Every start, while the relay has a domain |
 
 | Key                         | Set by                     | Notes                                                                                      |
 | --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------ |
@@ -101,12 +101,14 @@ The three module lists are empty until the action sets them. Each name must be l
 | `DISABLE_HTTPS`                    | on                                          | StartOS terminates TLS at the edge                                                                                                                                                       |
 | `BOSH_RELATIVE`                    | on                                          | A relative BOSH URL works from any address — `.local`, clearnet, or Tor — without the client knowing the public hostname                                                                 |
 | `ENABLE_XMPP_WEBSOCKET`            | off                                         | The websocket URL has no relative form and would be generated as an unreachable absolute address; disabling it makes the client use BOSH                                                 |
-| `JAVA_TOOL_OPTIONS`                | `-XX:-UseBASE64Intrinsics` (Jicofo and JVB)  | Mitigates CVE-2026-114938 (Java4Shell) on affected x86-64 processors with AVX-512 VBMI; upstream's own JVM options still apply                                                               |
-| `JVB_ADVERTISE_PRIVATE_CANDIDATES` | off                                         | Bridge-internal addresses are unroutable for clients and can stall connection setup if offered                                                                                           |
-| `JVB_ADVERTISE_IPS`                | the published public IPv4s and global IPv6s | The bridge advertises the addresses StartOS publishes, and only those                                                                                                                    |
+| `JAVA_TOOL_OPTIONS`                | `-XX:-UseBASE64Intrinsics` (Jicofo and JVB) | Mitigates CVE-2026-114938 (Java4Shell) on affected x86-64 processors with AVX-512 VBMI; upstream's own JVM options still apply                                                           |
+| `JVB_ADVERTISE_PRIVATE_CANDIDATES` | on                                          | Off, the bridge withholds every private address from browsers, the published LAN ones included, so a meeting without a public IPv4 carries no media                                      |
+| `JVB_ADVERTISE_IPS`                | the published IPv4s and global IPv6s, with their ports | Static mappings use StartOS's enabled IP/port pairs: public, LAN and VPN alike                                                                                         |
 | `JVB_DISABLE_STUN`                 | on                                          | Upstream's STUN mapping harvester is additive and would advertise whatever the box's default route exits from — a VPN exit, an upstream NAT — beside or instead of the published address |
 | `TURN_*`, `STUN_*`, `TURNS_*`      | the TURN Relay interface                    | Set only when the TURN Relay interface has an enabled public domain                                                                                                                      |
 | `XMPP_*_MODULES`                   | the lists in `store.json`                   | `XMPP_MODULES`, `XMPP_MUC_MODULES` and `XMPP_SPEAKERSTATS_MODULES`, each set only while its list is not empty; upstream's templates add the names to what they already enable            |
+
+Allowing private candidates also lets JVB offer the container's own host candidates, independently of `JVB_ADVERTISE_IPS`. Those are not additional published addresses or gateway forwards; browsers that cannot route to them use a reachable mapped candidate instead.
 
 ## Dependencies
 
@@ -202,7 +204,7 @@ Five daemon checks, plus standalone checks for the bridge's and the relay's publ
 - **failure** — the web UI is reachable on clearnet while the media interface has no public IPv4: meetings connect and carry no media. The message names the interface to fix. While failing it polls every 5 seconds instead of 30, so it clears promptly once the address is enabled.
 - **disabled** — the web UI has no clearnet address, and the bridge is reachable only on the local network. This is the ordinary state of a purely local or Tor-only setup.
 
-Because STUN is disabled, a bridge with no published address advertises no public candidate at all rather than a wrong one — there is no silent middle state in which the bridge advertises an address StartOS never published.
+Because STUN is disabled, JVB does not discover extra public mappings through STUN. Its static mappings follow the media binding's enabled addresses and ports; container host candidates are offered separately.
 
 **`turn-address` reports the relay the same way**: success once the TURN Relay interface has an enabled public domain serving both plain TURN and TURN over TLS; failure when the web UI is on clearnet and the relay is not; disabled otherwise. `coturn` exists only while the relay has a domain, since Coturn needs one for its realm.
 
@@ -266,7 +268,7 @@ startos_managed_env_vars:
   - JVB_BREWERY_MUC
   - JVB_ADVERTISE_PRIVATE_CANDIDATES
   - JVB_DISABLE_STUN
-  - JVB_ADVERTISE_IPS # when a public IPv4 or global IPv6 is published
+  - JVB_ADVERTISE_IPS # the enabled IPv4s and global IPv6s of Video Bridge Media
   - DISABLE_HTTPS
   - BOSH_RELATIVE
   - ENABLE_XMPP_WEBSOCKET

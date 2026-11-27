@@ -36,6 +36,6 @@ verified, tried, and decided belongs in the commit message and the PR body.
 
 - **Keep Prosody's accounts on their own subpath at `/var/lib/prosody`.** Accounts written under `/config` are lost on the next restart.
 - **Keep the relay's `external-ip` the bridge's published IPv4, `relay-ip` and the sole `allowed-peer-ip` the container address, and every other peer denied.** Relaying to the bridge works only through that rewrite, and a wider peer list makes it an open relay.
-- **Don't re-enable the XMPP websocket (`ENABLE_XMPP_WEBSOCKET`), private candidates (`JVB_ADVERTISE_PRIVATE_CANDIDATES`) or STUN (`JVB_DISABLE_STUN`).** Each breaks calls in a way README's environment table describes.
+- **Don't re-enable the XMPP websocket (`ENABLE_XMPP_WEBSOCKET`) or STUN (`JVB_DISABLE_STUN`), and don't turn off private candidates (`JVB_ADVERTISE_PRIVATE_CANDIDATES`).** Each breaks calls in a way README's environment table describes; the last silences every meeting held without a public IPv4.
 - **Read exposure that feeds only a health check with `.onChange`, not `.const()`.** A `.const()` read restarts every daemon each time an address is toggled.
 - **Keep `prosodyModulePattern` on both the action's input and `store.json`'s shape.** Upstream's templates paste each module name between quotes in prosody's Lua configuration, so a looser pattern on either lets a name close the string.
