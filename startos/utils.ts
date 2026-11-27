@@ -1,4 +1,8 @@
-import { utils } from '@start9labs/start-sdk'
+import { X509Certificate } from 'node:crypto'
+import { constants as fsConstants } from 'node:fs'
+import { FileHandle, lstat, open } from 'node:fs/promises'
+import { types, utils } from '@start9labs/start-sdk'
+import { i18n } from './i18n'
 import { sdk } from './sdk'
 
 export const uiPort = 8000
@@ -18,6 +22,128 @@ export const turnPort = 3479
 export const turnsPort = 443
 export const turnHostId = 'turn-multi'
 export const turnInterfaceId = 'turn'
+
+// Prosody's client port, published for an external Jibri only while the
+// Recording action is on. Its own host, so no domain added to another
+// interface ever reaches it.
+export const xmppPort = 5222
+export const xmppHostId = 'xmpp-multi'
+export const xmppInterfaceId = 'xmpp'
+
+// Every enabled address on a binding that reaches past the private network: a
+// public IP or domain, or an address a plugin adds (an onion, say).
+export function exposedAddresses(
+  addresses: types.DerivedAddressInfo | undefined,
+): string[] {
+  if (!addresses) return []
+  return addresses.available
+    .filter(
+      (h) =>
+        (h.public ||
+          h.metadata.kind === 'public-domain' ||
+          h.metadata.kind === 'plugin') &&
+        utils.isAddressEnabled(addresses, h),
+    )
+    .map((h) => {
+      // Brackets keep an IPv6 address readable before its port.
+      const host = h.metadata.kind === 'ipv6' ? `[${h.hostname}]` : h.hostname
+      return h.port == null ? host : `${host}:${h.port}`
+    })
+}
+
+// What the xmpp-exposure check last learned about the Recorder XMPP binding:
+// its exposed addresses and how many private ones a recorder could dial, that
+// the binding is not there yet, or that the watch on it failed.
+export type XmppExposure =
+  | { exposed: string[]; reachable: number }
+  | 'unbound'
+  | 'unreadable'
+
+export function xmppExposure(
+  addresses: types.DerivedAddressInfo | undefined,
+): XmppExposure {
+  if (!addresses) return 'unbound'
+  return {
+    exposed: exposedAddresses(addresses),
+    reachable: recorderXmppServers(addresses).length,
+  }
+}
+
+// Follows the Recorder XMPP binding for the xmpp-exposure check. The SDK calls
+// back once with no value when a watch fails, and then stops watching, so from
+// then on the state is 'unreadable' rather than the last answer, which nothing
+// would ever update again.
+export async function followXmppExposure(watch: {
+  once(): Promise<XmppExposure>
+  onChange(
+    callback: (value: XmppExposure | undefined) => { cancel: boolean },
+  ): void
+}): Promise<() => XmppExposure> {
+  let state = await watch.once()
+  watch.onChange((next) => {
+    state = next ?? 'unreadable'
+    return { cancel: false }
+  })
+  return () => state
+}
+
+// Fails closed: a watch that stopped answering cannot vouch for the port, and
+// success is claimed only once a private address is actually published.
+export function xmppExposureResult(
+  state: XmppExposure,
+): types.NamedHealthCheckResultKindInput {
+  if (state === 'unreadable')
+    return {
+      result: 'failure',
+      message: i18n(
+        'Cannot read the Recorder XMPP addresses, so the port may be published beyond your private network. Restart Jitsi Meet.',
+      ),
+    }
+  if (state !== 'unbound' && state.exposed.length)
+    return {
+      result: 'failure',
+      message: i18n(
+        'The recorder XMPP port is published beyond your private network, at ${addresses}. Disable those addresses on the "Recorder XMPP" interface.',
+        { addresses: state.exposed.join(', ') },
+      ),
+    }
+  if (state === 'unbound' || !state.reachable)
+    return {
+      result: 'starting',
+      waiting: true,
+      message: i18n(
+        'Waiting for a private address on the "Recorder XMPP" interface.',
+      ),
+    }
+  return {
+    result: 'success',
+    message: i18n(
+      'The recorder XMPP port is published on private addresses only.',
+    ),
+  }
+}
+
+// The `host:port` pairs a Jibri off the box can dial: enabled, private, and
+// neither loopback nor the container bridge. IPv6 is left out because Jibri
+// splits XMPP_SERVER at its first colon.
+export function recorderXmppServers(
+  addresses: types.DerivedAddressInfo | undefined,
+): string[] {
+  if (!addresses) return []
+  return utils
+    .filterNonLocal(
+      addresses.available.filter((h) => utils.isAddressEnabled(addresses, h)),
+    )
+    .filter(
+      (h) =>
+        !h.public &&
+        h.port != null &&
+        h.metadata.kind !== 'ipv6' &&
+        h.metadata.kind !== 'public-domain' &&
+        h.metadata.kind !== 'plugin',
+    )
+    .map((h) => `${h.hostname}:${h.port}`)
+}
 
 export const coturnDataDir = '/var/lib/coturn'
 export const coturnConfPath = `${coturnDataDir}/turnserver.conf`
@@ -75,6 +201,14 @@ export const xmppConfig = {
   XMPP_GUEST_DOMAIN: 'guest.meet.jitsi',
   XMPP_SERVER: 'localhost',
 }
+
+// The images' defaults, named here so the env and the Recorder Connection
+// Details action cannot disagree. XMPP_HIDDEN_DOMAIN is never passed: every
+// template defaults it to this, and Jibri's recorder account lives there.
+export const xmppHiddenDomain = 'hidden.meet.jitsi'
+export const jibriXmppUser = 'jibri'
+export const jibriRecorderUser = 'recorder'
+export const jibriBreweryMuc = 'jibribrewery'
 
 // Every image reads its seed configuration from /config.
 export const configMountpoint = '/config'
@@ -135,11 +269,323 @@ export const jvbMounts = sdk.Mounts.of().mountVolume({
 
 export const prosodyPort = 5280
 
+// prosodyctl needs a rendered config, and the running container keeps its own
+// under /run, so actions render a throwaway copy from the same templates.
+// With the env below it points at the same accounts on the storage volume.
+const prosodyctlDir = '/tmp/prosody-config'
+export const prosodyctlCfg = `${prosodyctlDir}/prosody.cfg.lua`
+export const renderProsodyctlCfg =
+  `mkdir -p ${prosodyctlDir}/conf.d ${prosodyctlDir}/certs && ` +
+  `tpl /defaults/prosody.cfg.lua > ${prosodyctlCfg} && ` +
+  `tpl /defaults/conf.d/jitsi-meet.cfg.lua > ${prosodyctlDir}/conf.d/jitsi-meet.cfg.lua`
+export const prosodyctlEnv = {
+  ...xmppConfig,
+  ENABLE_AUTH: '1',
+  ENABLE_GUESTS: '1',
+  AUTH_TYPE: 'internal',
+}
+
+// Prosody's internal storage keeps each host's accounts in a folder named
+// after the host with every character but a letter or digit written as %xx.
+export function prosodyHostDir(host: string): string {
+  const escaped = host.replace(
+    /[^A-Za-z0-9]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).padStart(2, '0')}`,
+  )
+  return `${prosodyStorageMountpoint}/data/${escaped}`
+}
+
+// The auth domain's certificate, which a recorder can pin. The image generates
+// a certificate it finds missing under /run at every start, so one kept only
+// there changes on each restart; it copies /config over /run first, so one
+// kept here, on the volume, is used every time instead.
+export const recorderCertDir = `${configMountpoint}/certs`
+const recorderCertName = xmppConfig.XMPP_AUTH_DOMAIN
+// The same folder, as a path under the main volume (prosodyMounts puts its
+// `prosody` subpath at /config), and the certificate's name in it.
+export const recorderCertVolumeDir = 'prosody/certs'
+export const recorderCertFile = `${recorderCertName}.crt`
+
+// Runs before prosody on every start. On: keeps the pinnable certificate.
+// One already in /config/certs is kept and pinned as is, an older image's
+// included; otherwise one is created once, valid for ten years so a
+// recorder's pin is not cut short by a yearly expiry (rotating it means
+// replacing the file and re-pinning). Off: deletes Jibri's two accounts, so a
+// password left over from an earlier time on cannot sign in. Off works on the
+// files because prosodyctl in this image deletes users only through a running
+// prosody, and the recorder's host is not configured while recording is off;
+// register-setup recreates both accounts from store.json when recording comes
+// back on.
+export function recorderSetupExec(on: boolean): {
+  command: [string, ...string[]]
+  user?: string
+} {
+  if (on) {
+    const crt = `${recorderCertDir}/${recorderCertName}.crt`
+    const key = `${recorderCertDir}/${recorderCertName}.key`
+    const owner = `${prosodyUser}:${prosodyUser}`
+    // Runs as prosody's user, who owns the folder and so can plant links in
+    // it; anything those reach is already writable by that user.
+    const asProsody = [
+      'set -eu',
+      `if [ ! -s '${crt}' ] || [ ! -s '${key}' ]; then`,
+      `  rm -f '${key}.new' '${crt}.new'`,
+      `  openssl req -quiet -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 -subj '/CN=${recorderCertName}' -addext 'subjectAltName=DNS:${recorderCertName}' -addext 'basicConstraints=critical,CA:FALSE' -addext 'keyUsage=critical,digitalSignature,keyEncipherment' -addext 'extendedKeyUsage=serverAuth' -keyout '${key}.new' -out '${crt}.new'`,
+      `  mv -f '${key}.new' '${key}'`,
+      `  mv -f '${crt}.new' '${crt}'`,
+      'fi',
+      `chmod 600 '${key}'`,
+    ].join('\n')
+    return {
+      command: [
+        'sh',
+        '-c',
+        [
+          'set -eu',
+          // /config is made root's first, so prosody's user cannot swap the
+          // folder for a link once the check below has passed. An install
+          // that came through the 2.0.11146:2 migration has /config owned by
+          // that user (`chown -R`); the image only reads it, so 755 keeps it
+          // readable. Root follows no link: `chown -h` changes a link itself,
+          // and it touches only the folder and the two files, which an older
+          // image may have left owned by another user.
+          `chown -h 0:0 '${configMountpoint}'`,
+          `chmod 755 '${configMountpoint}'`,
+          `if [ -L '${recorderCertDir}' ]; then echo '${recorderCertDir} is a symbolic link' >&2; exit 1; fi`,
+          `mkdir -p '${recorderCertDir}'`,
+          `chown -h ${owner} '${recorderCertDir}'`,
+          `for f in '${crt}' '${key}'; do if [ -e "$f" ] || [ -L "$f" ]; then chown -h ${owner} "$f"; fi; done`,
+          `exec /command/s6-setuidgid ${prosodyUser} sh -c "$1"`,
+        ].join('\n'),
+        'recorder-setup',
+        asProsody,
+      ],
+      user: 'root',
+    }
+  }
+  const purge = (host: string, user: string) =>
+    `purge '${prosodyHostDir(host)}' '${user}'`
+  return {
+    command: [
+      'sh',
+      '-c',
+      [
+        'set -eu',
+        // Every file prosody keeps for the user: <host>/<store>/<user>.dat,
+        // .list, or .lidx (a list's index). A file prosody removes while find
+        // walks the folder is not an error, which would stop Jitsi starting.
+        'purge() { [ -d "$1" ] || return 0; find "$1" -ignore_readdir_race -mindepth 2 -maxdepth 2 -type f \\( -name "$2.dat" -o -name "$2.list" -o -name "$2.lidx" \\) -print -delete; }',
+        purge(xmppConfig.XMPP_AUTH_DOMAIN, jibriXmppUser),
+        purge(xmppHiddenDomain, jibriRecorderUser),
+      ].join('\n'),
+    ],
+  }
+}
+
 export type Turn = {
   domain: string
   turnPort: number | null
   turnsPort: number | null
   secret: string
+}
+
+// Passwords for Jibri's two accounts, or null while the Recording action is
+// off.
+export type Recording = {
+  JIBRI_XMPP_PASSWORD: string
+  JIBRI_RECORDER_PASSWORD: string
+} | null
+
+// The Rotate Recorder Passwords action, without its effects.
+//
+// Recording on: one account at a time, its new password is registered and
+// then saved, so a failed register leaves every account on the password
+// store.json holds, and a later run overwrites any account a failure left
+// behind. Saving restarts Jitsi Meet if it is running (main reads store.json
+// with .const), which ends sessions signed in with an old password; if a save
+// fails after its register, restart does that instead. A failed restart never
+// hides the save's error.
+//
+// Recording off: neither account should exist, so nothing is registered. The
+// two account files are purged first, in case Recording was switched off while
+// Jitsi Meet was stopped and no start has deleted them yet; register-setup
+// then creates both from the new stored passwords when Recording is back on.
+// Both are saved at once, so Jitsi Meet restarts at most once. Recording may
+// have been turned on while this ran, and its start may already have created
+// both accounts with the old passwords, which register-setup never changes; so
+// the switch is read again after the save, and if it is now on both new
+// passwords are registered and Jitsi Meet restarts, ending any session signed
+// in with an old one.
+export async function rotateRecorderAccounts(io: {
+  recording: boolean
+  recordingNow: () => Promise<boolean>
+  newPassword: () => string
+  register: (user: string, host: string, password: string) => Promise<void>
+  purge: () => Promise<void>
+  save: (passwords: Partial<NonNullable<Recording>>) => Promise<void>
+  restart: () => Promise<void>
+}): Promise<void> {
+  const accounts = [
+    [jibriXmppUser, xmppConfig.XMPP_AUTH_DOMAIN, 'JIBRI_XMPP_PASSWORD'],
+    [jibriRecorderUser, xmppHiddenDomain, 'JIBRI_RECORDER_PASSWORD'],
+  ] as const
+  if (!io.recording) {
+    await io.purge()
+    const passwords = {
+      JIBRI_XMPP_PASSWORD: io.newPassword(),
+      JIBRI_RECORDER_PASSWORD: io.newPassword(),
+    }
+    await io.save(passwords)
+    if (!(await io.recordingNow())) return
+    for (const [user, host, field] of accounts)
+      await io.register(user, host, passwords[field])
+    await io.restart()
+    return
+  }
+  for (const [user, host, field] of accounts) {
+    const password = io.newPassword()
+    await io.register(user, host, password)
+    try {
+      await io.save({ [field]: password })
+    } catch (e) {
+      await io.restart().catch(() => {})
+      throw e
+    }
+  }
+}
+
+// Whether StartOS means the service to be running: sdk.restart on a stopped
+// service would start it, which an action's cleanup must not do.
+export function isRunning(
+  status: { desired: { main: string } } | null,
+): boolean {
+  return (
+    status?.desired.main === 'running' || status?.desired.main === 'restarting'
+  )
+}
+
+// The recorder's certificate as Recorder Connection Details shows it. The
+// folder belongs to prosody's user, who could plant a link or a fifo there,
+// so a link (the folder or the file) or anything but a small regular file is
+// refused, and the text is shown only if it is exactly one PEM certificate
+// that parses. On Linux, where the action runs, the folder is opened first
+// (refused if it is a link) and the file is opened inside that open folder
+// through /proc/self/fd, so the folder cannot be swapped for a link between
+// the check and the read. Elsewhere (the unit tests on a Mac) the folder is
+// checked with lstat and then opened by path, which leaves that window open.
+export const recorderCertMaxBytes = 64 * 1024
+
+export function singleCertificatePem(text: string): string | null {
+  const m =
+    /^\s*(-----BEGIN CERTIFICATE-----\r?\n(?:[A-Za-z0-9+/=]{1,76}\r?\n)+-----END CERTIFICATE-----)\s*$/.exec(
+      text,
+    )
+  if (!m) return null
+  const pem = m[1].replace(/\r\n/g, '\n')
+  try {
+    new X509Certificate(pem)
+  } catch {
+    return null
+  }
+  return pem
+}
+
+export async function readRecorderCert(
+  dir: string,
+  file: string,
+): Promise<{ pem: string } | 'missing' | 'unreadable'> {
+  let folder: FileHandle | undefined
+  let handle: FileHandle | undefined
+  try {
+    let path = `${dir}/${file}`
+    if (process.platform === 'linux') {
+      folder = await open(
+        dir,
+        fsConstants.O_RDONLY |
+          fsConstants.O_DIRECTORY |
+          fsConstants.O_NOFOLLOW |
+          fsConstants.O_NONBLOCK,
+      )
+      path = `/proc/self/fd/${folder.fd}/${file}`
+    } else if (!(await lstat(dir)).isDirectory()) return 'unreadable'
+    // O_NONBLOCK so a fifo cannot hold the action open.
+    handle = await open(
+      path,
+      fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK,
+    )
+    const st = await handle.stat()
+    if (!st.isFile() || st.size > recorderCertMaxBytes) return 'unreadable'
+    const buf = Buffer.alloc(recorderCertMaxBytes + 1)
+    const { bytesRead } = await handle.read(buf, 0, buf.length, 0)
+    if (bytesRead > recorderCertMaxBytes) return 'unreadable'
+    const pem = singleCertificatePem(buf.toString('utf8', 0, bytesRead))
+    return pem ? { pem } : 'unreadable'
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'ENOENT'
+      ? 'missing'
+      : 'unreadable'
+  } finally {
+    await handle?.close().catch(() => {})
+    await folder?.close().catch(() => {})
+  }
+}
+
+const commonEnv = {
+  TZ: 'UTC',
+  ...xmppConfig,
+}
+
+// Mitigates CVE-2026-114938 (Java4Shell). The images' run scripts overwrite JAVA_SYS_PROPS.
+export const javaEnv = {
+  ...commonEnv,
+  JAVA_TOOL_OPTIONS: '-XX:-UseBASE64Intrinsics',
+}
+
+export function webEnv(opts: { recording: boolean }) {
+  const env: Record<string, string> = {
+    ...commonEnv,
+    ENABLE_AUTH: '1',
+    ENABLE_GUESTS: '1',
+    // StartOS handles TLS; the web container serves plain HTTP
+    DISABLE_HTTPS: '1',
+    // Generate a relative BOSH URL (/http-bind) so it works from any
+    // origin (.local, clearnet, Tor) without knowing the public hostname
+    BOSH_RELATIVE: '1',
+    // No relative option exists for websocket — it always generates an
+    // absolute wss://localhost:8443 URL. Disable it so the client uses BOSH.
+    ENABLE_XMPP_WEBSOCKET: '0',
+    // Internal nginx proxy target for BOSH requests → prosody
+    XMPP_BOSH_URL_BASE: 'http://localhost:5280',
+  }
+
+  // Turns on the client's recording service and names the hidden domain, so
+  // the recorder is left out of the participant list. The template reads no
+  // brewery name.
+  if (opts.recording) env.ENABLE_RECORDING = '1'
+
+  return env
+}
+
+export function jicofoEnv(opts: {
+  JICOFO_AUTH_PASSWORD: string
+  recording: boolean
+}) {
+  const env: Record<string, string> = {
+    ...javaEnv,
+    ENABLE_AUTH: '1',
+    ENABLE_GUESTS: '1',
+    JICOFO_AUTH_USER: 'focus',
+    JICOFO_AUTH_PASSWORD: opts.JICOFO_AUTH_PASSWORD,
+  }
+
+  // Jicofo looks for Jibri in this room of the internal MUC, and trusts the
+  // hidden domain once recording is on.
+  if (opts.recording) {
+    env.ENABLE_RECORDING = '1'
+    env.JIBRI_BREWERY_MUC = jibriBreweryMuc
+  }
+
+  return env
 }
 
 export function prosodyEnv(opts: {
@@ -150,6 +596,7 @@ export function prosodyEnv(opts: {
     'XMPP_MODULES' | 'XMPP_MUC_MODULES' | 'XMPP_SPEAKERSTATS_MODULES',
     string[]
   >
+  recording: Recording
 }) {
   const env: Record<string, string> = {
     TZ: 'UTC',
@@ -185,6 +632,21 @@ export function prosodyEnv(opts: {
   // nothing.
   for (const [name, modules] of Object.entries(opts.modules)) {
     if (modules.length) env[name] = modules.join(',')
+  }
+
+  // The image registers both accounts at startup and lists the control
+  // account among prosody's admins. It creates an account only if it is
+  // missing, so a changed password would never reach an existing one (the
+  // Rotate Recorder Passwords action re-registers them itself). The
+  // brewery is a room on the internal MUC that Jicofo and Jibri both join;
+  // prosody reads no name for it.
+  const recording = opts.recording
+  if (recording) {
+    env.ENABLE_RECORDING = '1'
+    env.JIBRI_XMPP_USER = jibriXmppUser
+    env.JIBRI_XMPP_PASSWORD = recording.JIBRI_XMPP_PASSWORD
+    env.JIBRI_RECORDER_USER = jibriRecorderUser
+    env.JIBRI_RECORDER_PASSWORD = recording.JIBRI_RECORDER_PASSWORD
   }
 
   return env

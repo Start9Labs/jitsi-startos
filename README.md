@@ -51,7 +51,7 @@ Five unmodified upstream images. The four Jitsi images run their entrypoints as 
 | `jvb-sub`     | The video bridge, which carries the actual media                                             |
 | `coturn-sub`  | The TURN relay, for participants who cannot reach the bridge directly                        |
 
-Startup is ordered: `prosody` first, then `web`, `jicofo`, and `jvb` alongside it. Oneshots run before their daemons — `nginx-patch` writes a longer proxy timeout so long-lived BOSH connections are not cut, and `prosody-chown` and `coturn-chown` hand their directories to the unprivileged user each image runs as, since StartOS mounts volumes root-owned. `coturn` and `coturn-chown` exist only while the TURN Relay interface has an enabled public domain.
+Startup is ordered: `prosody` first, then `web`, `jicofo`, and `jvb` alongside it. Oneshots run before their daemons — `nginx-patch` writes a longer proxy timeout so long-lived BOSH connections are not cut, and `prosody-chown` and `coturn-chown` hand their directories to the unprivileged user each image runs as, since StartOS mounts volumes root-owned. `recorder-setup` runs after `prosody-chown` and before `prosody` on every start: while Recording is on it keeps the certificate a recorder pins, and while it is off it deletes Jibri's two accounts (see [Recording](#recording)). `coturn` and `coturn-chown` exist only while the TURN Relay interface has an enabled public domain.
 
 ## Volume and Data Layout
 
@@ -65,6 +65,8 @@ One volume, subdivided per component. Each image reads its seed configuration fr
 | `main` | `coturn/` → `/var/lib/coturn`                                | `turnserver.conf`, rendered on every start     |
 | `main` | root                                                         | `store.json`                                   |
 
+Prosody's **certificate for `auth.meet.jitsi`** is kept at `prosody/certs/` on the volume once Recording has been on. The image generates any certificate it does not find under `/run` at every start, so without this the certificate an external Jibri pins would change on each restart; the image copies `/config` over `/run` first, so the kept one is used instead. `recorder-setup` creates one only when `prosody/certs/` holds no `auth.meet.jitsi` certificate and key: self-signed, valid ten years, for that one name, and unable to sign another certificate. One already there, such as an older image may have left, is kept and pinned as it is, whatever its expiry or key. Every other certificate prosody uses, `meet.jitsi`'s among them, comes from `prosody/certs/` when one is there and is otherwise generated on each start. Root first makes `/config` its own with mode 755 (an install that came through the `2.0.11146:2` migration has it owned by the image's user, who could otherwise swap `certs` for a link after the check), then refuses a `certs` that is a link, creates that folder, and hands it and the two files to the image's user without following a link; the certificate is written and its key made private as that user.
+
 Prosody's **accounts** live at `/var/lib/prosody/data`, on their own subpath, rather than under `/config`. Upstream generates prosody's live configuration under `/run` and treats `/config` as a seed, so account data placed there would not survive a restart. Upstream moved `data_path` into the `data/` subdirectory in `stable-11146-2` and migrates only from the `/config` seed, so the `2.0.11146:2` migration moves accounts written by earlier releases across.
 
 **Your own Prosody modules** go in `/prosody-plugins-custom`, in the `prosody-sub` container. Upstream's configuration lists that directory first in `plugin_paths` and the image ships nothing there, so it is empty until you add a file. The folder stays root-owned, and `prosody-chown` leaves it alone, because prosody only needs to read it. A module file must therefore be readable by everyone (mode `0644`, which writing it as root with `cat >` produces). One that prosody cannot read is reported in its log as `No such file or directory`, as if it were missing.
@@ -75,7 +77,7 @@ Two models: the package's credentials and settings, and the relay's configuratio
 
 | File                     | Format | Modelled                  | Written by                                |
 | ------------------------ | ------ | ------------------------- | ----------------------------------------- |
-| `store.json`             | JSON   | Yes — `FileHelper.json`   | Install, every init, and both actions     |
+| `store.json`             | JSON   | Yes — `FileHelper.json`   | Install, every init, and four actions     |
 | `coturn/turnserver.conf` | text   | Yes — `FileHelper.string` | Every start, while the relay has a domain |
 
 | Key                         | Set by                     | Notes                                                                                      |
@@ -87,8 +89,11 @@ Two models: the package's credentials and settings, and the relay's configuratio
 | `XMPP_MODULES`              | The Prosody Modules action | Yours; additional modules for the main and guest virtual hosts                             |
 | `XMPP_MUC_MODULES`          | The Prosody Modules action | Yours; additional modules for the conference room component                                |
 | `XMPP_SPEAKERSTATS_MODULES` | The Prosody Modules action | Yours; additional modules for the speaker stats component                                  |
+| `ENABLE_RECORDING`          | The Recording action       | Whether an external Jibri may connect; off by default                                      |
+| `JIBRI_XMPP_PASSWORD`       | First init, rotation       | Jibri's control account, `jibri@auth.meet.jitsi`                                           |
+| `JIBRI_RECORDER_PASSWORD`   | First init, rotation       | Jibri's recorder account, `recorder@hidden.meet.jitsi`                                     |
 
-The internal credentials are generated once and never shown — nothing asks for them and nothing displays them.
+The internal credentials are generated once and never shown — nothing asks for them and nothing displays them. The two Jibri passwords are the exception: a recorder off the box needs them, so the Recorder Connection Details action displays them. They are generated on the first init whether or not Recording is ever turned on, and change only through the Rotate Recorder Passwords action: prosody creates each account only if it is missing and keeps the password it was created with, so that action re-registers the accounts itself while Recording is on, and with it off deletes them so they are recreated from the new passwords.
 
 The three module lists are empty until the action sets them. Each name must be lowercase letters, digits and underscores, because upstream's templates paste the names into prosody's Lua configuration: the action refuses any other name, and a list holding one after a hand edit is read as empty.
 
@@ -107,6 +112,12 @@ The three module lists are empty until the action sets them. Each name must be l
 | `JVB_DISABLE_STUN`                 | on                                          | Upstream's STUN mapping harvester is additive and would advertise whatever the box's default route exits from — a VPN exit, an upstream NAT — beside or instead of the published address |
 | `TURN_*`, `STUN_*`, `TURNS_*`      | the TURN Relay interface                    | Set only when the TURN Relay interface has an enabled public domain                                                                                                                      |
 | `XMPP_*_MODULES`                   | the lists in `store.json`                   | `XMPP_MODULES`, `XMPP_MUC_MODULES` and `XMPP_SPEAKERSTATS_MODULES`, each set only while its list is not empty; upstream's templates add the names to what they already enable            |
+| `ENABLE_RECORDING`                 | on (Prosody, Jicofo, web)                   | Set only while the Recording action is on: Prosody registers Jibri's accounts, Jicofo watches the brewery, the client offers server-side recording                                       |
+| `JIBRI_*_USER`                     | `jibri`, `recorder` (Prosody)               | Set only while the Recording action is on; the images' defaults, passed so the details action cannot disagree                                                                            |
+| `JIBRI_*_PASSWORD`                 | from `store.json` (Prosody)                 | Set only while the Recording action is on; the two Jibri accounts' passwords                                                                                                             |
+| `JIBRI_BREWERY_MUC`                | `jibribrewery` (Jicofo)                     | Set only while the Recording action is on; the image's default. Prosody and the web image read no brewery name                                                                           |
+
+`XMPP_HIDDEN_DOMAIN` is never set: every image defaults it to `hidden.meet.jitsi`, the domain the recorder account lives on.
 
 Allowing private candidates also lets JVB offer the container's own host candidates, independently of `JVB_ADVERTISE_IPS`. Those are not additional published addresses or gateway forwards; browsers that cannot route to them use a reachable mapped candidate instead.
 
@@ -116,13 +127,14 @@ None. The TURN relay is bundled.
 
 ## Network Access and Interfaces
 
-Three interfaces. The first two are what a call needs; the third is the fallback for participants who cannot reach the bridge.
+Three interfaces, and a fourth while the Recording action is on. The first two are what a call needs; the third is the fallback for participants who cannot reach the bridge.
 
-| Interface          | Id          | Type | Port                         | Description                |
-| ------------------ | ----------- | ---- | ---------------------------- | -------------------------- |
-| Web UI             | `ui`        | ui   | 8000                         | The Jitsi Meet client      |
-| Video Bridge Media | `jvb-media` | api  | 10000                        | The WebRTC media transport |
-| TURN Relay         | `turn`      | api  | 3479; TLS on 443 at a domain | The TURN relay             |
+| Interface          | Id          | Type | Port                         | Description                                  |
+| ------------------ | ----------- | ---- | ---------------------------- | -------------------------------------------- |
+| Web UI             | `ui`        | ui   | 8000                         | The Jitsi Meet client                        |
+| Video Bridge Media | `jvb-media` | api  | 10000                        | The WebRTC media transport                   |
+| TURN Relay         | `turn`      | api  | 3479; TLS on 443 at a domain | The TURN relay                               |
+| Recorder XMPP      | `xmpp`      | api  | 5222                         | Prosody's client port, for an external Jibri |
 
 **Neither interface is sufficient alone.** The web interface serves the client and proxies all of its XMPP signaling at `/http-bind` — `BOSH_RELATIVE` keeps that on whichever origin the page was loaded from; the media interface carries only WebRTC media. So a public media address with a LAN-only UI leaves remote guests unable to load the page or join the room at all, and a clearnet-reachable UI with no public address on the media interface produces meetings that join and then carry no audio or video. The `jvb-public-address` health check detects the second combination and reports it; see [Health Checks](#health-checks).
 
@@ -134,6 +146,10 @@ Only UDP peer allocations are enabled (`no-tcp-relay`); TCP peer allocations wou
 
 The TURN Relay interface needs its **own public domain**, since StartOS will not serve one domain on two hosts. It serves plain TURN on UDP and TCP at 3479, and TURN over TLS that StartOS terminates at the domain on 443 — the same port, and the same certificate authority, as any HTTPS domain on the server — before forwarding plaintext to Coturn.
 
+**Recorder XMPP is bound only while the Recording action is on.** Turning it off disables the binding, which keeps its port and the address choices made on it for the next time. It is raw TCP with no TLS leg from StartOS: Prosody requires STARTTLS on this port itself. It lives on its own host, `xmpp-multi`, so a domain added to any other interface never reaches it, and StartOS leaves a public IP address off until it is switched on. Nothing in the package can stop a public address being enabled on it, so the `xmpp-exposure` health check fails while one is (see [Health Checks](#health-checks)). The port StartOS assigns need not be 5222; the Recorder Connection Details action reads the one it did.
+
+**The two Jibri passwords are the real boundary, and the private port is defence in depth.** Jibri's browser joins meetings through the Web UI like any guest, then signs in as the recorder over the same public BOSH endpoint, so the recorder account is reachable wherever the Web UI is. That account joins any room past its lobby and password to record it without showing up as a participant; by default everyone in the meeting still sees that a recording is running. The control account is a full Jitsi and Prosody administrator, with access to every meeting's audio and video (it can, for one, join the bridge brewery and be taken by Jicofo as a video bridge), so treat its password as root-equivalent for this Jitsi. Both accounts exist only while Recording is on. Anyone who can reach the XMPP port can also try the guest domain's anonymous sign-in, as anyone reaching the Web UI already can.
+
 ## Installation and First-Run Flow
 
 Install generates the internal credentials and raises a `critical` task for the admin password. There is no wizard.
@@ -142,7 +158,7 @@ If you intend to use Jitsi over the internet, give the **Web UI** interface a cl
 
 ## Actions
 
-Two actions. The password action renames itself to match what running it will do.
+Five actions. The password action renames itself to match what running it will do.
 
 ### Create / Reset Admin Password
 
@@ -174,6 +190,33 @@ The lists decide only which **new** names load. Because `/prosody-plugins-custom
 
 Replacing a module's file does not restart anything, and neither does saving the action without changing a list. Restart Jitsi Meet to load the new file.
 
+### Recording
+
+Lets an external Jibri record meetings: binds the Recorder XMPP interface and sets the recording variables above.
+
+- **What it changes:** `ENABLE_RECORDING` in `store.json`; the Jibri passwords stay as they are.
+- **Cost:** saving a change restarts every daemon, which ends any meeting in progress. Saving without a change writes and restarts nothing.
+- **Repeat safety:** safe. Off then on again brings back the same accounts, passwords and port.
+- **Turning it off** removes the variables and the binding, and the `recorder-setup` oneshot deletes both accounts from Prosody's store before Prosody starts, so neither password signs in while it is off. It deletes the account files directly, every store Prosody keeps for each user: `prosodyctl` in this image deletes a user only through a running Prosody, and the recorder's `hidden.meet.jitsi` virtual host is not configured while recording is off. Turning it back on lets the image's `register-setup` create both accounts again from the passwords in `store.json`, so the recorder needs no change.
+
+### Recorder Connection Details
+
+Displays what a Jibri off the box needs, each value named after the Jibri environment variable it fills: one `XMPP_SERVER` per enabled private IPv4, `.local` or private-domain address of Recorder XMPP as `host:port` at the assigned port (IPv6 is left out, since Jibri splits `XMPP_SERVER` at its first colon), the XMPP domains, `JIBRI_BREWERY_MUC`, both usernames and passwords (masked, copyable), and a `PUBLIC_URL` for each HTTPS address of the Web UI: its public domains if it has any, otherwise its other addresses except onions.
+
+- **When:** after turning Recording on; disabled while it is off. Run it again after changing the interface's addresses.
+- **Cost:** reads only; changes nothing.
+- **Certificate:** it also shows `XMPP_TRUST_ALL_CERTS` as `false` and the PEM of Prosody's `auth.meet.jitsi` certificate, read from `prosody/certs/` on the volume (it reads "not created yet" until the first start with Recording on). The file is read without following a link, only if it is a regular file of at most 64 KiB, and shown only if it is exactly one PEM certificate that parses; anything else reads "not readable", since that folder belongs to prosody's user. Jibri trusts any XMPP certificate by default (its image defaults `XMPP_TRUST_ALL_CERTS` to true), and the path to the box can run through a VPN hub, so whoever sits on that path could otherwise capture the control password. Mounted into `/usr/local/share/ca-certificates/`, the certificate is added to Jibri's Java trust store by the image's `setup-custom-ca`; with `XMPP_TRUST_ALL_CERTS` false, Jibri also checks that the certificate names `auth.meet.jitsi`, so a trusted certificate for any other name is refused too (both checked against `jibri:stable-11509-1`). A certificate the package created is self-signed for ten years and marked `CA:FALSE`; one that was already on the volume is shown as it is, and one an older image generated may be marked `CA:TRUE`, which lets its key sign other certificates a Jibri that pins it would then trust. Replacing it is manual and nothing else does it: delete `auth.meet.jitsi.crt` and `auth.meet.jitsi.key` under `prosody/certs/`, restart with Recording on (`recorder-setup` creates a new pair), run this action, and re-pin the new certificate in every recorder.
+
+### Rotate Recorder Passwords
+
+Replaces both Jibri passwords with newly generated ones.
+
+- **Availability:** always.
+- **With Recording off:** neither account should exist, so nothing is registered. It deletes the two account files (the same purge `recorder-setup` runs at a start with Recording off, as the image user, for the case where Recording was switched off while Jitsi Meet was stopped) and then saves both new passwords to `store.json` at once; `register-setup` creates both accounts from them when Recording is next on. A failed purge saves nothing. After the save it reads the switch again: if Recording was turned on while the action ran (whose start may already have created both accounts with the old passwords, which `register-setup` never changes), it registers both new passwords and restarts Jitsi Meet if it is running.
+- **With Recording on:** it changes both passwords in `store.json`, one account at a time: it re-registers the account with `prosodyctl register` (which overwrites, as the admin-password action relies on), in a temporary container with a throwaway config rendered with the recorder's virtual host, and only then saves that account's password. A failed register leaves every account on the password `store.json` holds; running the action again overwrites any account a failure left behind.
+- **Cost:** each save restarts Jitsi Meet if it is running (once with Recording off, twice with it on), which ends any meeting in progress and every session signed in with an old password; if a save fails after its register, the action restarts Jitsi Meet itself, only if StartOS has it running (`desired` running or restarting), and reports the save's error even if that restart fails. The external recorder stops signing in until its `.env` carries the new passwords, as StartOS warns before running.
+- **Repeat safety:** safe; each run generates fresh passwords.
+
 ## Tasks
 
 One task, raised at install, and it blocks the service until you clear it.
@@ -186,17 +229,18 @@ One task, raised at install, and it blocks the service until you clear it.
 
 ## Health Checks
 
-Five daemon checks, plus standalone checks for the bridge's and the relay's public addresses.
+Five daemon checks, plus standalone checks for the bridge's and the relay's public addresses, and for the recorder port's while Recording is on.
 
-| Check                | Displayed              | Method                                 | Grace |
-| -------------------- | ---------------------- | -------------------------------------- | ----- |
-| `prosody`            | "XMPP Server"          | Prosody's port is listening            | 30s   |
-| `web`                | "Web Interface"        | The UI port is listening               | —     |
-| `jicofo`             | "Conference Focus"     | Its own health endpoint                | —     |
-| `jvb`                | "Video Bridge"         | Its port is listening                  | —     |
-| `coturn`             | "TURN Relay"           | The relay port is listening            | —     |
-| `jvb-public-address` | "Video Bridge Address" | Which address the bridge can advertise | —     |
-| `turn-address`       | "TURN Relay Address"   | Whether the relay has a public domain  | —     |
+| Check                | Displayed               | Method                                     | Grace |
+| -------------------- | ----------------------- | ------------------------------------------ | ----- |
+| `prosody`            | "XMPP Server"           | Prosody's port is listening                | 30s   |
+| `web`                | "Web Interface"         | The UI port is listening                   | —     |
+| `jicofo`             | "Conference Focus"      | Its own health endpoint                    | —     |
+| `jvb`                | "Video Bridge"          | Its port is listening                      | —     |
+| `coturn`             | "TURN Relay"            | The relay port is listening                | —     |
+| `jvb-public-address` | "Video Bridge Address"  | Which address the bridge can advertise     | —     |
+| `turn-address`       | "TURN Relay Address"    | Whether the relay has a public domain      | —     |
+| `xmpp-exposure`      | "Recorder XMPP Address" | Whether Recorder XMPP has a public address | —     |
 
 **`jvb-public-address` is where the media-address problem surfaces**, and it reports all three states rather than only the broken one:
 
@@ -208,13 +252,15 @@ Because STUN is disabled, JVB does not discover extra public mappings through ST
 
 **`turn-address` reports the relay the same way**: success once the TURN Relay interface has an enabled public domain serving both plain TURN and TURN over TLS; failure when the web UI is on clearnet and the relay is not; disabled otherwise. `coturn` exists only while the relay has a domain, since Coturn needs one for its realm.
 
+**`xmpp-exposure` exists only while the Recording action is on.** It fails, naming the addresses (IPv6 in brackets), while Recorder XMPP has any enabled public IP, public domain, or plugin address such as an onion; waits, without claiming success, until the binding exists and has an enabled private address a recorder could dial; and succeeds once it does and nothing public is enabled. It reads the interface as it changes, without restarting anything, and polls every 5 seconds while failing. It fails closed: if the watch on the interface errors, the SDK stops watching, so the check fails from then on ("cannot read the Recorder XMPP addresses") until Jitsi Meet restarts, rather than keep the last answer.
+
 **`prosody` failing takes everything with it**, since the other three authenticate against it; its 30-second grace covers account migration on first start.
 
 ## Backups and Restore
 
 The `main` volume is copied wholesale — `sdk.Backups.ofVolumes('main')`. No dump step and nothing excluded.
 
-- **Included:** the XMPP accounts, every component's seed configuration, your own Prosody modules, `store.json` with every credential and module list, and the relay's rendered config.
+- **Included:** the XMPP accounts, Jibri's among them, every component's seed configuration, your own Prosody modules, `store.json` with every credential and module list, and the relay's rendered config.
 - **Restore:** complete. The admin account and password come back together, so no task is raised.
 
 ## Limitations and Differences
@@ -226,6 +272,7 @@ The `main` volume is copied wholesale — `sdk.Backups.ofVolumes('main')`. No du
 5. **TLS is terminated by StartOS**, so the web container serves plain HTTP.
 6. **The relay serves only this Jitsi.** It cannot be used as a general TURN server by other apps; install the Coturn package for that.
 7. **No riscv64 build.** x86_64 and aarch64 only.
+8. **No recorder is bundled.** The Recording action lets a Jibri you run elsewhere connect; recordings are saved on that machine, never on this server.
 
 ---
 
@@ -244,7 +291,7 @@ subcontainers:
   - jvb-sub # video bridge
   - coturn-sub # TURN relay
 volumes:
-  main: per-component subpaths → /config, prosody accounts → /var/lib/prosody/data, your own prosody modules → /prosody-plugins-custom, store.json at the root, coturn/ → /var/lib/coturn
+  main: per-component subpaths → /config, prosody accounts → /var/lib/prosody/data, your own prosody modules → /prosody-plugins-custom, the recorder's pinned certificate → prosody/certs/, store.json at the root, coturn/ → /var/lib/coturn
 file_models:
   - store.json
   - coturn/turnserver.conf
@@ -284,14 +331,24 @@ startos_managed_env_vars:
   - XMPP_MODULES # when its list is not empty
   - XMPP_MUC_MODULES # when its list is not empty
   - XMPP_SPEAKERSTATS_MODULES # when its list is not empty
+  - ENABLE_RECORDING # Prosody, Jicofo and web; while Recording is on
+  - JIBRI_XMPP_USER # Prosody; while Recording is on
+  - JIBRI_XMPP_PASSWORD # Prosody; while Recording is on
+  - JIBRI_RECORDER_USER # Prosody; while Recording is on
+  - JIBRI_RECORDER_PASSWORD # Prosody; while Recording is on
+  - JIBRI_BREWERY_MUC # Jicofo; while Recording is on
 dependencies: []
 interfaces:
   ui: { type: ui, port: 8000 }
   jvb-media: { type: api, port: 10000 }
   turn: { type: api, port: 3479, tls_port: 443 }
+  xmpp: { type: api, port: 5222, host: xmpp-multi } # only while Recording is on
 actions:
   - reset-password # renames itself to "Create Admin Password" when unset
   - prosody-modules # additional Prosody modules to load
+  - recording # restarts Jitsi when saved with a change
+  - recorder-connection-details # disabled while Recording is off
+  - rotate-recorder-passwords # restarts Jitsi if running; the recorder needs the new passwords
 tasks:
   - { action: reset-password, severity: critical }
 health_checks:
@@ -302,4 +359,5 @@ health_checks:
   - coturn # displayed "TURN Relay"; only while the relay has a domain
   - jvb-public-address # displayed "Video Bridge Address"; success / failure / disabled per published address
   - turn-address # displayed "TURN Relay Address"; success / failure / disabled
+  - xmpp-exposure # displayed "Recorder XMPP Address"; only while Recording is on; fails on any public address
 ```

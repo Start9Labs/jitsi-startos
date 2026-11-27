@@ -3,13 +3,14 @@ import { i18n } from '../i18n'
 import { sdk } from '../sdk'
 import {
   getPassword,
+  prosodyctlCfg,
+  prosodyctlEnv,
   prosodyMounts,
   prosodyStorageMountpoint,
   prosodyUser,
+  renderProsodyctlCfg,
   xmppConfig,
 } from '../utils'
-
-const cfgDir = '/tmp/prosody-config'
 
 export const resetPassword = sdk.Action.withoutInput(
   'reset-password',
@@ -53,27 +54,15 @@ export const resetPassword = sdk.Action.withoutInput(
           ],
           { user: 'root' },
         )
-        // The running container generates its config under /run, so render a
-        // throwaway copy from the same templates to register against the
-        // accounts on the storage volume. `register` overwrites an existing user.
+        // `register` overwrites an existing user.
         await subc.execFail(
           [
             'sh',
             '-c',
-            `mkdir -p ${cfgDir}/conf.d ${cfgDir}/certs && ` +
-              `tpl /defaults/prosody.cfg.lua > ${cfgDir}/prosody.cfg.lua && ` +
-              `tpl /defaults/conf.d/jitsi-meet.cfg.lua > ${cfgDir}/conf.d/jitsi-meet.cfg.lua && ` +
-              `prosodyctl --config ${cfgDir}/prosody.cfg.lua register admin ${xmppConfig.XMPP_DOMAIN} "$ADMIN_PASSWORD"`,
+            `${renderProsodyctlCfg} && ` +
+              `prosodyctl --config ${prosodyctlCfg} register admin ${xmppConfig.XMPP_DOMAIN} "$ADMIN_PASSWORD"`,
           ],
-          {
-            env: {
-              ...xmppConfig,
-              ENABLE_AUTH: '1',
-              ENABLE_GUESTS: '1',
-              AUTH_TYPE: 'internal',
-              ADMIN_PASSWORD: password,
-            },
-          },
+          { env: { ...prosodyctlEnv, ADMIN_PASSWORD: password } },
         )
       },
     )

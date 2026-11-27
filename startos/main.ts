@@ -7,6 +7,9 @@ import {
   coturnConfPath,
   coturnDataDir,
   coturnMounts,
+  followXmppExposure,
+  javaEnv,
+  jicofoEnv,
   jicofoHealthPort,
   jicofoMounts,
   jvbHttpPort,
@@ -19,6 +22,7 @@ import {
   prosodyPort,
   prosodyStorageMountpoint,
   prosodyUser,
+  recorderSetupExec,
   renderTurnserverConf,
   turnHostId,
   turnInterfaceId,
@@ -26,8 +30,12 @@ import {
   uiHostId,
   uiInterfaceId,
   uiPort,
+  webEnv,
   webMounts,
-  xmppConfig,
+  xmppExposure,
+  xmppExposureResult,
+  xmppHostId,
+  xmppPort,
 } from './utils'
 
 export const main = sdk.setupMain(async ({ effects }) => {
@@ -45,6 +53,12 @@ export const main = sdk.setupMain(async ({ effects }) => {
     XMPP_MUC_MODULES,
     XMPP_SPEAKERSTATS_MODULES,
   } = store
+  const recording = store.ENABLE_RECORDING
+    ? {
+        JIBRI_XMPP_PASSWORD: store.JIBRI_XMPP_PASSWORD,
+        JIBRI_RECORDER_PASSWORD: store.JIBRI_RECORDER_PASSWORD,
+      }
+    : null
 
   // Static mappings preserve StartOS's enabled IP/port pairs.
   const jvbPublic = await sdk.host
@@ -101,6 +115,16 @@ export const main = sdk.setupMain(async ({ effects }) => {
     return { cancel: false }
   })
 
+  // Feeds only the xmpp-exposure check, so it is watched rather than read
+  // with .const(), which would restart every daemon when an address is toggled.
+  const xmppState = recording
+    ? await followXmppExposure(
+        sdk.host.getOwn(effects, xmppHostId, (host) =>
+          xmppExposure(host?.bindings[xmppPort]?.addresses),
+        ),
+      )
+    : null
+
   const turnEndpoint = await sdk.host
     .getOwn(effects, turnHostId, (host) => {
       const iface =
@@ -147,17 +171,6 @@ export const main = sdk.setupMain(async ({ effects }) => {
     'coturn-sub',
   )
 
-  const commonEnv = {
-    TZ: 'UTC',
-    ...xmppConfig,
-  }
-
-  // Mitigates CVE-2026-114938 (Java4Shell). The images' run scripts overwrite JAVA_SYS_PROPS.
-  const javaEnv = {
-    ...commonEnv,
-    JAVA_TOOL_OPTIONS: '-XX:-UseBASE64Intrinsics',
-  }
-
   const webSub = sdk.SubContainer.of(
     effects,
     { imageId: 'web' },
@@ -203,6 +216,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
       },
       requires: [],
     })
+    .addOneshot('recorder-setup', {
+      subcontainer: prosodySub,
+      exec: recorderSetupExec(!!recording),
+      requires: ['prosody-chown'],
+    })
     .addDaemon('prosody', {
       subcontainer: prosodySub,
       exec: {
@@ -217,6 +235,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
             XMPP_MUC_MODULES,
             XMPP_SPEAKERSTATS_MODULES,
           },
+          recording,
         }),
       },
       ready: {
@@ -228,28 +247,14 @@ export const main = sdk.setupMain(async ({ effects }) => {
             errorMessage: i18n('The XMPP server is not ready'),
           }),
       },
-      requires: ['prosody-chown'],
+      requires: ['prosody-chown', 'recorder-setup'],
     })
     .addDaemon('web', {
       subcontainer: webSub,
       exec: {
         command: sdk.useEntrypoint(),
         runAsInit: true,
-        env: {
-          ...commonEnv,
-          ENABLE_AUTH: '1',
-          ENABLE_GUESTS: '1',
-          // StartOS handles TLS; the web container serves plain HTTP
-          DISABLE_HTTPS: '1',
-          // Generate a relative BOSH URL (/http-bind) so it works from any
-          // origin (.local, clearnet, Tor) without knowing the public hostname
-          BOSH_RELATIVE: '1',
-          // No relative option exists for websocket — it always generates an
-          // absolute wss://localhost:8443 URL. Disable it so the client uses BOSH.
-          ENABLE_XMPP_WEBSOCKET: '0',
-          // Internal nginx proxy target for BOSH requests → prosody
-          XMPP_BOSH_URL_BASE: 'http://localhost:5280',
-        },
+        env: webEnv({ recording: !!recording }),
       },
       ready: {
         display: i18n('Web Interface'),
@@ -271,13 +276,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       exec: {
         command: sdk.useEntrypoint(),
         runAsInit: true,
-        env: {
-          ...javaEnv,
-          ENABLE_AUTH: '1',
-          ENABLE_GUESTS: '1',
-          JICOFO_AUTH_USER: 'focus',
-          JICOFO_AUTH_PASSWORD,
-        },
+        env: jicofoEnv({ JICOFO_AUTH_PASSWORD, recording: !!recording }),
       },
       ready: {
         display: i18n('Conference Focus'),
@@ -428,4 +427,19 @@ export const main = sdk.setupMain(async ({ effects }) => {
       },
       requires: [],
     })
+    .addHealthCheck('xmpp-exposure', () =>
+      xmppState
+        ? {
+            ready: {
+              display: i18n('Recorder XMPP Address'),
+              trigger: sdk.trigger.statusTrigger(30_000, {
+                starting: 5_000,
+                failure: 5_000,
+              }),
+              fn: () => xmppExposureResult(xmppState()),
+            },
+            requires: [],
+          }
+        : null,
+    )
 })

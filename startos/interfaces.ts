@@ -1,3 +1,4 @@
+import { storeJson } from './fileModels/store.json'
 import { i18n } from './i18n'
 import { sdk } from './sdk'
 import {
@@ -11,6 +12,9 @@ import {
   uiHostId,
   uiInterfaceId,
   uiPort,
+  xmppHostId,
+  xmppInterfaceId,
+  xmppPort,
 } from './utils'
 
 export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
@@ -83,5 +87,43 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
     }),
   ])
 
-  return [uiReceipt, jvbReceipt, turnReceipt]
+  const receipts = [uiReceipt, jvbReceipt, turnReceipt]
+
+  // Bound only while the Recording action is on; a pass that skips it
+  // disables the binding and keeps its port and the user's address choices.
+  // Raw TCP like the media port: prosody negotiates TLS itself (STARTTLS,
+  // which it requires on this port), so StartOS adds no TLS leg.
+  const recording = await storeJson
+    .read((s) => s.ENABLE_RECORDING)
+    .const(effects)
+  if (recording) {
+    const xmppOrigin = await sdk.MultiHost.of(effects, xmppHostId).bindPort(
+      xmppPort,
+      {
+        protocol: null,
+        preferredExternalPort: xmppPort,
+        secure: { ssl: false },
+        addSsl: null,
+      },
+    )
+    receipts.push(
+      await xmppOrigin.export([
+        sdk.createInterface(effects, {
+          name: i18n('Recorder XMPP'),
+          id: xmppInterfaceId,
+          description: i18n(
+            'XMPP for an external Jibri recorder. Keep it on your private network.',
+          ),
+          type: 'api',
+          masked: false,
+          schemeOverride: null,
+          username: null,
+          path: '',
+          query: {},
+        }),
+      ]),
+    )
+  }
+
+  return receipts
 })
