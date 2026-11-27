@@ -45,6 +45,39 @@ docker run --rm --entrypoint grep ghcr.io/jitsi/prosody:stable-<build> \
   -nE 'plugin_paths|XMPP_(MUC_|SPEAKERSTATS_)?MODULES' /defaults/conf.d/jitsi-meet.cfg.lua
 ```
 
+The Recording action rests on what four images read. Check each in the new tag:
+
+- prosody reads `ENABLE_RECORDING`, `JIBRI_XMPP_USER`, `JIBRI_XMPP_PASSWORD`, `JIBRI_RECORDER_USER` and `JIBRI_RECORDER_PASSWORD` in `/defaults/conf.d/jitsi-meet.cfg.lua` and `/etc/s6-overlay/scripts/register-setup`, and that script still creates an account only when it is missing. If it starts resetting passwords, the Rotate Recorder Passwords action no longer needs to re-register the accounts itself.
+- the `recorder-setup` oneshot (`recorderSetupExec` in `startos/utils.ts`) rests on two things in the prosody image. Off, it deletes Jibri's accounts as files, because `prosodyctl deluser` here needs a running prosody: check that storage is still `internal`, under `/var/lib/prosody/data/<host with each non-alphanumeric character as %xx>/<store>/<user>.dat`, and whether `prosodyctl` can delete a user offline again (then use that). On, it keeps the `auth.meet.jitsi` certificate in `/config/certs`: check that `/etc/s6-overlay/scripts/config` still copies `/config` over `/run/prosody/config` before generating any certificate it finds missing there. Root only prepares that folder and hands the rest to `s6` through `/command/s6-setuidgid`, so check that s6-overlay still ships it there.
+- **Canary for the off-state purge.** A store that moves fails silently: the purge finds no folder, deletes nothing, and the `jibri` admin account outlives Recording being turned off. Before shipping a tag, confirm prosody's `data_path`, then start the image once with recording on and confirm Jibri's two accounts land only where `prosodyHostDir` points (a SQL or other non-file store shows no files here, which fails the check too):
+
+  ```bash
+  IMG=ghcr.io/jitsi/prosody:stable-<build>
+  docker run --rm --network none --entrypoint grep $IMG -n data_path /defaults/prosody.cfg.lua
+  # expect: data_path = "/var/lib/prosody/data"
+  docker run -d --name canary --network none -v canary:/var/lib/prosody \
+    -e JICOFO_AUTH_PASSWORD=canary -e JVB_AUTH_PASSWORD=canary \
+    -e ENABLE_RECORDING=1 -e JIBRI_XMPP_PASSWORD=canary -e JIBRI_RECORDER_PASSWORD=canary $IMG
+  # once `docker logs canary` shows "All users registered":
+  docker exec canary find /var/lib/prosody -name 'jibri.*' -o -name 'recorder.*'
+  # expect only <host>/<store>/<user>.dat files under these two folders:
+  #   /var/lib/prosody/data/auth%2emeet%2ejitsi/{accounts,account_roles}/jibri.dat
+  #   /var/lib/prosody/data/hidden%2emeet%2ejitsi/{accounts,account_roles}/recorder.dat
+  docker rm -f canary && docker volume rm canary
+  ```
+
+  Any other path, file name or depth means `recorderSetupExec` and `prosodyHostDir` must move with it before the tag ships.
+
+- jicofo reads `ENABLE_RECORDING` and `JIBRI_BREWERY_MUC` in `/defaults/jicofo.conf`; web reads `ENABLE_RECORDING`, `ENABLE_LIVESTREAMING` and `ENABLE_LIVESTREAMING_VALIDATOR_REGEXP_STRING` in `/defaults/settings-config.js`, and the validator still reaches the client as a quoted JavaScript string (the package's pattern contains no backslash for that reason).
+- every image, jibri's `/defaults/xmpp.conf` included, still defaults `XMPP_HIDDEN_DOMAIN` to `hidden.meet.jitsi`, the value `xmppHiddenDomain` in `startos/utils.ts` shows to the user. A variable an image stops reading is ignored without an error.
+
+```bash
+for img in prosody jicofo web jibri; do
+  docker run --rm --network none --entrypoint sh ghcr.io/jitsi/${img}:stable-<build> -c \
+    'grep -rnE "ENABLE_RECORDING|JIBRI_|XMPP_HIDDEN_DOMAIN|XMPP_RECORDER_DOMAIN" /defaults /etc/s6-overlay/scripts'
+done
+```
+
 If a release changes which uid the containers run as, files an earlier release wrote stay owned by the old uid, and the entrypoints copy seed data with plain `cp` that fails silently on a permission error.
 
 A Coturn bump needs its own check: `renderTurnserverConf` in `startos/utils.ts` depends on how Coturn maps `external-ip` to `relay-ip` and orders `allowed-peer-ip` before `denied-peer-ip`, so read its changelog for either, and run a forced-relay call (`#config.forceTurnRelay=true`) before shipping.

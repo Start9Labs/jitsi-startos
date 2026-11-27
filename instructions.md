@@ -39,6 +39,9 @@ The **TURN Relay Address** check works the same way: green once the TURN Relay i
 
 - **Reset Admin Password** — generate a new admin password (shown once). Use it to rotate the password or recover if you've lost it. It asks for confirmation first, because the current password stops working.
 - **Prosody Modules** — choose additional Prosody modules to load. Most servers never need it; use it when an add-on's instructions name a module to enable. Saving restarts Jitsi Meet, which ends any meeting in progress.
+- **Recording** — record meetings, or stream them live, through a Jibri recorder. Off by default. Saving a change restarts Jitsi Meet, which ends any meeting in progress.
+- **Recorder Connection Details** — what a Jibri on another server needs. Available while Recording and "Allow recorders on other servers" are both on.
+- **Rotate Recorder Passwords** — replace the recorder's passwords. Jitsi Meet restarts if it is running; a Jibri on this server picks up the new passwords by itself, and one on another server needs the new connection details.
 
 ### Adding your own Prosody module
 
@@ -56,3 +59,23 @@ Prosody is the part of Jitsi Meet that handles sign-in and meeting rooms, and it
 To stop loading a module, remove its name from the list and save. The file stays in the folder, and the folder is part of your backups.
 
 If you later replace a module's file with a newer copy, restart Jitsi Meet yourself from its service page. Saving the action without changing a list does not restart it, so the old copy keeps running until you do.
+
+### Recording meetings with Jibri
+
+Jitsi Meet records through **Jibri**, which joins a meeting as a hidden participant and saves it as a video file, or streams it live. Jibri is its own service: install it on this server, or on another server if this one is short of memory (each recording takes about 2 GB and two CPU cores).
+
+**Jibri on this server.** Install the Jibri service. It asks you to turn on **Recording** here; do that, and it connects by itself.
+
+**Jibri on another StartOS server.**
+
+1. Run the **Recording** action and turn on **Recording** and **Allow recorders on other servers**. Jitsi Meet restarts, and a **Recorder XMPP** interface appears.
+2. Keep that interface on your private network: leave its public addresses off. The **Recorder XMPP Address** health check turns red if it has one. Both servers must be on the same network, such as your LAN or a VPN.
+3. Run **Recorder Connection Details**, copy the **Connection string**, and paste it into the Jibri service's **Connect to Jitsi** action on the other server.
+
+**Jibri without StartOS.** Recorder Connection Details also gives a **Jibri environment** file for Jibri's Docker image and the **XMPP certificate** to mount into it. Keep `XMPP_TRUST_ALL_CERTS=false`. By default Jibri writes these passwords to its logs; see Jibri's own documentation to turn that off.
+
+Once a Jibri is connected, a moderator starts and stops recording from the meeting's menu. With **Live streaming** on, the menu also offers a live stream: paste an RTMP address with its stream key, such as your Owncast's, or a YouTube stream key.
+
+**Keep the connection details secret.** They let a recorder join any meeting here without showing up as a participant (everyone still sees that a recording is running), and the recorder's control account administers this Jitsi. If they may have leaked, run **Rotate Recorder Passwords**.
+
+Turning Recording off deletes the recorder's accounts, so the old details stop working; turning it back on restores them unchanged.

@@ -1,3 +1,4 @@
+import { storeJson } from './fileModels/store.json'
 import { i18n } from './i18n'
 import { sdk } from './sdk'
 import {
@@ -11,6 +12,9 @@ import {
   uiHostId,
   uiInterfaceId,
   uiPort,
+  xmppHostId,
+  xmppInterfaceId,
+  xmppPort,
 } from './utils'
 
 export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
@@ -83,5 +87,43 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
     }),
   ])
 
-  return [uiReceipt, jvbReceipt, turnReceipt]
+  const receipts = [uiReceipt, jvbReceipt, turnReceipt]
+
+  // Bound while Recording is on, for a Jibri on this server at its bridge
+  // address; exported, which puts it on the LAN, only while recorders on other
+  // servers are allowed. Raw TCP: prosody requires STARTTLS on this port.
+  const recording = await storeJson
+    .read((s) => ({ on: s.ENABLE_RECORDING, remote: s.RECORDING_REMOTE }))
+    .const(effects)
+  if (recording?.on) {
+    const xmppOrigin = await sdk.MultiHost.of(effects, xmppHostId).bindPort(
+      xmppPort,
+      {
+        protocol: null,
+        preferredExternalPort: xmppPort,
+        secure: { ssl: false },
+        addSsl: null,
+      },
+    )
+    if (recording.remote)
+      receipts.push(
+        await xmppOrigin.export([
+          sdk.createInterface(effects, {
+            name: i18n('Recorder XMPP'),
+            id: xmppInterfaceId,
+            description: i18n(
+              'XMPP for an external Jibri recorder. Keep it on your private network.',
+            ),
+            type: 'api',
+            masked: false,
+            schemeOverride: null,
+            username: null,
+            path: '',
+            query: {},
+          }),
+        ]),
+      )
+  }
+
+  return receipts
 })

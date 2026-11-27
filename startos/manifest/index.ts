@@ -10,7 +10,7 @@ export const manifest = setupManifest({
   marketingUrl: 'https://jitsi.org/',
   donationUrl: null,
   description: { short, long },
-  volumes: ['main'],
+  volumes: ['main', 'public'],
   images: {
     web: {
       source: { dockerTag: 'ghcr.io/jitsi/web:stable-11509-1' },
