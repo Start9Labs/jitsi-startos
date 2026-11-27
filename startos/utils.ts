@@ -442,8 +442,8 @@ export type Recording = {
 // the password an account was created with, so the new ones are registered
 // before store.json holds them.
 //
-// Recording on: both accounts are registered, the first put back if the
-// second fails, then both are saved at once, so Jitsi Meet restarts once.
+// Stored passwords remain authoritative after a failed rotation.
+// A rejected write may already have replaced store.json.
 //
 // Recording off: neither account should exist. Their files are purged first,
 // in case Recording was switched off while Jitsi Meet was stopped, then both
@@ -454,7 +454,7 @@ export type Recording = {
 export async function rotateRecorderAccounts(io: {
   recording: boolean
   recordingNow: () => Promise<boolean>
-  current: NonNullable<Recording>
+  current: () => Promise<NonNullable<Recording>>
   newPassword: () => string
   register: (user: string, host: string, password: string) => Promise<void>
   purge: () => Promise<void>
@@ -465,36 +465,53 @@ export async function rotateRecorderAccounts(io: {
     JIBRI_XMPP_PASSWORD: io.newPassword(),
     JIBRI_RECORDER_PASSWORD: io.newPassword(),
   }
-  const registerAll = async () => {
-    await io.register(
-      jibriXmppUser,
-      xmppConfig.XMPP_AUTH_DOMAIN,
-      next.JIBRI_XMPP_PASSWORD,
-    )
+  const accounts = [
+    [jibriXmppUser, xmppConfig.XMPP_AUTH_DOMAIN, 'JIBRI_XMPP_PASSWORD'],
+    [jibriRecorderUser, xmppHiddenDomain, 'JIBRI_RECORDER_PASSWORD'],
+  ] as const
+  const registerAll = async (passwords: NonNullable<Recording>) => {
+    for (const [user, host, field] of accounts)
+      await io.register(user, host, passwords[field])
+  }
+  const recover = async () => {
     try {
-      await io.register(
-        jibriRecorderUser,
-        xmppHiddenDomain,
-        next.JIBRI_RECORDER_PASSWORD,
-      )
+      const stored = await io.current()
+      for (const [user, host, field] of accounts) {
+        try {
+          await io.register(user, host, stored[field])
+        } catch (e) {
+          console.error(`Could not reconcile recorder account ${user}`, e)
+        }
+      }
     } catch (e) {
-      await io.register(
-        jibriXmppUser,
-        xmppConfig.XMPP_AUTH_DOMAIN,
-        io.current.JIBRI_XMPP_PASSWORD,
-      )
-      throw e
+      console.error('Could not read stored recorder passwords for recovery', e)
     }
+    await io.restart().catch((e) => {
+      console.error(
+        'Could not restart Jitsi Meet after recorder rotation failed',
+        e,
+      )
+    })
   }
   if (io.recording) {
-    await registerAll()
-    await io.save(next)
+    try {
+      await registerAll(next)
+      await io.save(next)
+    } catch (e) {
+      await recover()
+      throw e
+    }
     return
   }
   await io.purge()
   await io.save(next)
   if (!(await io.recordingNow())) return
-  await registerAll()
+  try {
+    await registerAll(next)
+  } catch (e) {
+    await recover()
+    throw e
+  }
   await io.restart()
 }
 

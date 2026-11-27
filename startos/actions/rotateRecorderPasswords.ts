@@ -56,7 +56,11 @@ export const rotateRecorderPasswords = sdk.Action.withoutInput(
         )
         await rotateRecorderAccounts({
           recording: !!store.ENABLE_RECORDING,
-          current: store,
+          current: async () => {
+            const saved = await storeJson.read().once()
+            if (!saved) throw new Error('store.json not found')
+            return saved
+          },
           recordingNow: async () =>
             !!(await storeJson.read().once())?.ENABLE_RECORDING,
           newPassword: getPassword,
